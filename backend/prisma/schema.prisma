@@ -11,8 +11,27 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
 model Product {
-  id Int @id @default(autoincrement())
-  name String
-  price Float
+  id          Int      @id @default(autoincrement())
+  name        String
+  price       Float
+  sku         String?  @unique
+  barcode     String?  @unique
+  category    String?
+  description String?
+  imageUrl    String?
+  stock       Int      @default(0)
+  unit        String   @default("pcs")
+  costPrice   Float?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+}
+
+model auth {
+  id       Int    @id @default(autoincrement())
+  email    String @unique
+  password String
+  role     String @default("user")
 }

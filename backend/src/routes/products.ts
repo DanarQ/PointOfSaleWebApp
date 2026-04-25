@@ -4,11 +4,29 @@ type ProductRecord = {
   id: number
   name: string
   price: number
+  sku?: string | null
+  barcode?: string | null
+  category?: string | null
+  description?: string | null
+  imageUrl?: string | null
+  stock?: number
+  unit?: string
+  costPrice?: number | null
+  isActive?: boolean
 }
 
 type ProductData = {
   name: string
   price: number
+  sku?: string | null
+  barcode?: string | null
+  category?: string | null
+  description?: string | null
+  imageUrl?: string | null
+  stock?: number
+  unit?: string
+  costPrice?: number | null
+  isActive?: boolean
 }
 
 export type ProductPrisma = {
@@ -31,12 +49,35 @@ function parseProductId(rawId: string) {
   return id
 }
 
+function parseOptionalString(
+  body: Record<string, unknown>,
+  fieldName: 'sku' | 'barcode' | 'category' | 'description' | 'imageUrl',
+): { value?: string | null } | { error: string } {
+  const value = body[fieldName]
+
+  if (value === undefined) {
+    return {}
+  }
+
+  if (value === null) {
+    return { value: null }
+  }
+
+  if (typeof value !== 'string') {
+    return { error: `${fieldName} must be a string` }
+  }
+
+  const normalizedValue = value.trim()
+  return { value: normalizedValue || null }
+}
+
 function parseProductBody(body: unknown): { data: ProductData } | { error: string } {
   if (!body || typeof body !== 'object') {
     return { error: 'invalid request body' }
   }
 
-  const { name, price } = body as { name?: unknown; price?: unknown }
+  const productBody = body as Record<string, unknown>
+  const { name, price } = productBody
   const normalizedName = typeof name === 'string' ? name.trim() : ''
 
   if (!normalizedName) {
@@ -47,11 +88,67 @@ function parseProductBody(body: unknown): { data: ProductData } | { error: strin
     return { error: 'price must be a non-negative number' }
   }
 
+  const data: ProductData = {
+    name: normalizedName,
+    price,
+  }
+
+  for (const fieldName of ['sku', 'barcode', 'category', 'description', 'imageUrl'] as const) {
+    const parsedString = parseOptionalString(productBody, fieldName)
+
+    if ('error' in parsedString) {
+      return { error: parsedString.error }
+    }
+
+    if ('value' in parsedString) {
+      data[fieldName] = parsedString.value
+    }
+  }
+
+  if (productBody.stock !== undefined) {
+    if (
+      typeof productBody.stock !== 'number' ||
+      !Number.isInteger(productBody.stock) ||
+      productBody.stock < 0
+    ) {
+      return { error: 'stock must be a non-negative integer' }
+    }
+
+    data.stock = productBody.stock
+  }
+
+  if (productBody.unit !== undefined) {
+    if (typeof productBody.unit !== 'string' || !productBody.unit.trim()) {
+      return { error: 'unit must be a non-empty string' }
+    }
+
+    data.unit = productBody.unit.trim()
+  }
+
+  if (productBody.costPrice !== undefined) {
+    if (productBody.costPrice === null) {
+      data.costPrice = null
+    } else if (
+      typeof productBody.costPrice !== 'number' ||
+      Number.isNaN(productBody.costPrice) ||
+      productBody.costPrice < 0
+    ) {
+      return { error: 'costPrice must be a non-negative number' }
+    } else {
+      data.costPrice = productBody.costPrice
+    }
+  }
+
+  if (productBody.isActive !== undefined) {
+    if (typeof productBody.isActive !== 'boolean') {
+      return { error: 'isActive must be a boolean' }
+    }
+
+    data.isActive = productBody.isActive
+  }
+
   return {
-    data: {
-      name: normalizedName,
-      price,
-    },
+    data,
   }
 }
 

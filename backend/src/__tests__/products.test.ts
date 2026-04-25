@@ -7,7 +7,18 @@ type Product = {
   id: number
   name: string
   price: number
+  sku?: string | null
+  barcode?: string | null
+  category?: string | null
+  description?: string | null
+  imageUrl?: string | null
+  stock?: number
+  unit?: string
+  costPrice?: number | null
+  isActive?: boolean
 }
+
+type ProductData = Omit<Product, 'id'>
 
 type TestCase = {
   name: string
@@ -26,7 +37,7 @@ function createPrismaStub(seed: Product[] = []) {
       async findUnique({ where }: { where: { id: number } }) {
         return products.find((product) => product.id === where.id) ?? null
       },
-      async create({ data }: { data: { name: string; price: number } }) {
+      async create({ data }: { data: ProductData }) {
         const product = { id: nextId++, ...data }
         products.push(product)
         return product
@@ -36,7 +47,7 @@ function createPrismaStub(seed: Product[] = []) {
         data,
       }: {
         where: { id: number }
-        data: { name: string; price: number }
+        data: ProductData
       }) {
         const productIndex = products.findIndex((product) => product.id === where.id)
 
@@ -186,6 +197,82 @@ const tests: TestCase[] = [
     },
   },
   {
+    name: 'POST /products creates a product with optional fields',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp(createPrismaStub())
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/products`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            name: ' Coffee Beans ',
+            price: 75000,
+            sku: '  BEAN-001  ',
+            barcode: '8991234567890',
+            category: 'Beverage',
+            description: 'Arabica blend',
+            imageUrl: 'https://example.com/coffee.jpg',
+            stock: 12,
+            unit: 'pack',
+            costPrice: 50000,
+            isActive: false,
+          }),
+        })
+
+        assert.equal(response.status, 201)
+        assert.deepEqual(await response.json(), {
+          id: 1,
+          name: 'Coffee Beans',
+          price: 75000,
+          sku: 'BEAN-001',
+          barcode: '8991234567890',
+          category: 'Beverage',
+          description: 'Arabica blend',
+          imageUrl: 'https://example.com/coffee.jpg',
+          stock: 12,
+          unit: 'pack',
+          costPrice: 50000,
+          isActive: false,
+        })
+      })
+    },
+  },
+  {
+    name: 'POST /products rejects negative stock',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp(createPrismaStub())
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/products`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ name: 'Milk', price: 10000, stock: -1 }),
+        })
+
+        assert.equal(response.status, 400)
+        assert.deepEqual(await response.json(), { error: 'stock must be a non-negative integer' })
+      })
+    },
+  },
+  {
+    name: 'POST /products rejects invalid isActive',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp(createPrismaStub())
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/products`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ name: 'Milk', price: 10000, isActive: 'yes' }),
+        })
+
+        assert.equal(response.status, 400)
+        assert.deepEqual(await response.json(), { error: 'isActive must be a boolean' })
+      })
+    },
+  },
+  {
     name: 'GET /products/:id rejects an invalid id',
     async run() {
       const { createApp } = await import('../app.js')
@@ -225,6 +312,38 @@ const tests: TestCase[] = [
 
         assert.equal(response.status, 200)
         assert.deepEqual(await response.json(), { id: 1, name: 'Latte', price: 20000 })
+      })
+    },
+  },
+  {
+    name: 'PUT /products/:id updates optional product fields',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp(createPrismaStub([{ id: 1, name: 'Coffee', price: 15000 }]))
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/products/1`, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            name: 'Latte',
+            price: 20000,
+            stock: 5,
+            unit: 'cup',
+            costPrice: 12000,
+            isActive: true,
+          }),
+        })
+
+        assert.equal(response.status, 200)
+        assert.deepEqual(await response.json(), {
+          id: 1,
+          name: 'Latte',
+          price: 20000,
+          stock: 5,
+          unit: 'cup',
+          costPrice: 12000,
+          isActive: true,
+        })
       })
     },
   },
