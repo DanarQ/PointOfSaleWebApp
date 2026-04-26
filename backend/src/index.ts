@@ -1,3 +1,4 @@
+// Entry point — loads env vars, connects to DB, and starts the HTTP server.
 import "dotenv/config";
 import prisma from "./db.js";
 import { createApp } from "./app.js";

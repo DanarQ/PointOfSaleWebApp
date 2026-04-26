@@ -30,6 +30,7 @@ model Product {
   updatedAt   DateTime  @default(now()) @updatedAt
 
   transactionItems TransactionItem[]
+  stockMovements   StockMovement[]
 }
 
 model Category {
@@ -42,11 +43,12 @@ model Category {
 }
 
 model auth {
-  id           Int           @id @default(autoincrement())
-  email        String        @unique
-  password     String
-  role         String        @default("user")
-  transactions Transaction[]
+  id             Int             @id @default(autoincrement())
+  email          String          @unique
+  password       String
+  role           String          @default("user")
+  transactions   Transaction[]
+  stockMovements StockMovement[]
 }
 
 model Transaction {
@@ -106,4 +108,27 @@ model TransactionItem {
 
   @@index([transactionId])
   @@index([productId])
+}
+
+model StockMovement {
+  id            Int      @id @default(autoincrement())
+  productId     Int
+  product       Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  userId        Int?
+  user          auth?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type          String
+  quantity      Int
+  stockBefore   Int
+  stockAfter    Int
+  referenceType String?
+  referenceId   Int?
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  @@index([productId])
+  @@index([userId])
+  @@index([type])
+  @@index([referenceType, referenceId])
+  @@index([createdAt])
+  @@map("stock_movements")
 }

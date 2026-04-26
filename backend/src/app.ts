@@ -1,9 +1,40 @@
+// Builds and returns the Express app.
+// createApp() accepts a prisma client so the same factory can be used in tests
+// with a mock/partial prisma object (only the needed models are required).
 import express from "express";
+import type { ErrorRequestHandler } from "express";
 import cors from "cors";
 import { createAuthRouter, type AuthPrisma } from "./routes/auth.js";
+import { createCategoriesRouter } from "./routes/categories.js";
 import { createProductsRouter, type ProductPrisma } from "./routes/products.js";
+import {
+  createProductStockMovementsRouter,
+  createStockMovementsRouter,
+} from "./routes/stockMovements.js";
+import { createTransactionsRouter } from "./routes/transactions.js";
+import { createPaymentsRouter } from "./routes/payments.js";
+import type { CategoryPrisma } from "./services/categories.service.js";
+import type { StockMovementPrisma } from "./services/stockMovements.service.js";
+import type { TransactionPrisma } from "./services/transactions.service.js";
+import type { PaymentPrisma } from "./services/payments.service.js";
 
-type AppPrisma = ProductPrisma & { auth?: unknown };
+// Union of all prisma model requirements across every router.
+// Using unknown for optional models because the real prisma client satisfies all of them.
+type AppPrisma = ProductPrisma & {
+  auth?: unknown;
+  category?: unknown;
+  stockMovement?: unknown;
+  transaction?: unknown;
+  transactionItem?: unknown;
+  payment?: unknown;
+  $transaction?: unknown;
+};
+
+// Catch-all error handler — Express identifies error handlers by their 4-parameter signature.
+// Returns JSON instead of the default HTML error page so the API stays consistent.
+const jsonErrorHandler: ErrorRequestHandler = (_error, _req, res, _next) => {
+  res.status(500).json({ error: "internal server error" });
+};
 
 export function createApp(prisma: AppPrisma) {
   const app = express();
@@ -11,15 +42,57 @@ export function createApp(prisma: AppPrisma) {
   app.use(cors());
   app.use(express.json());
 
+  // Simple liveness probe used by health-checks / load balancers.
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
   });
+
+  // Each router is mounted only when the required prisma models are present.
+  // This allows tests to opt-in to only the routes they need.
 
   if (prisma.auth) {
     app.use("/auth", createAuthRouter(prisma as ProductPrisma & AuthPrisma));
   }
 
+  if (prisma.category) {
+    app.use("/categories", createCategoriesRouter(prisma as ProductPrisma & CategoryPrisma));
+  }
+
+  // Stock movements need $transaction because creating one also updates product.stock atomically.
+  if (prisma.stockMovement && prisma.$transaction) {
+    app.use(
+      "/products/:id/stock-movements",
+      createProductStockMovementsRouter(prisma as ProductPrisma & StockMovementPrisma),
+    );
+    app.use(
+      "/stock-movements",
+      createStockMovementsRouter(prisma as ProductPrisma & StockMovementPrisma),
+    );
+  }
+
+  // Transactions need all four models plus $transaction because the whole checkout is one DB transaction.
+  if (
+    prisma.transaction &&
+    prisma.transactionItem &&
+    prisma.payment &&
+    prisma.stockMovement &&
+    prisma.$transaction
+  ) {
+    app.use(
+      "/transactions",
+      createTransactionsRouter(prisma as ProductPrisma & StockMovementPrisma & TransactionPrisma),
+    );
+  }
+
+  if (prisma.payment) {
+    app.use("/payments", createPaymentsRouter(prisma as ProductPrisma & PaymentPrisma));
+  }
+
+  // Products router is always present — other routers depend on the product model.
   app.use("/products", createProductsRouter(prisma));
+
+  // Must be registered last so it catches errors thrown by all routes above.
+  app.use(jsonErrorHandler);
 
   return app;
 }
