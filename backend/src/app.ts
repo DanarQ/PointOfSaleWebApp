@@ -13,7 +13,7 @@ import {
 } from "./routes/stockMovements.js";
 import { createTransactionsRouter } from "./routes/transactions.js";
 import { createPaymentsRouter } from "./routes/payments.js";
-import { createAuthMiddleware } from "./middleware/auth.js";
+import { createAuthMiddleware, requireRole } from "./middleware/auth.js";
 import type { CategoryPrisma } from "./services/categories.service.js";
 import type { StockMovementPrisma } from "./services/stockMovements.service.js";
 import type { TransactionPrisma } from "./services/transactions.service.js";
@@ -54,6 +54,10 @@ export function createApp(prisma: AppPrisma) {
     ? createAuthMiddleware(prisma as ProductPrisma & AuthPrisma)
     : undefined;
 
+  // requireAdmin combines authentication + role check in one guard array.
+  // Only used on destructive/sensitive endpoints (delete, void).
+  const requireAdmin = requireAuth ? requireRole('admin') : undefined;
+
   // Each router is mounted only when the required prisma models are present.
   // This allows tests to opt-in to only the routes they need.
 
@@ -64,7 +68,7 @@ export function createApp(prisma: AppPrisma) {
   if (prisma.category) {
     app.use(
       "/categories",
-      createCategoriesRouter(prisma as ProductPrisma & CategoryPrisma, requireAuth),
+      createCategoriesRouter(prisma as ProductPrisma & CategoryPrisma, requireAuth, requireAdmin),
     );
   }
 
@@ -93,6 +97,7 @@ export function createApp(prisma: AppPrisma) {
       createTransactionsRouter(
         prisma as ProductPrisma & StockMovementPrisma & TransactionPrisma,
         requireAuth,
+        requireAdmin,
       ),
     );
   }
@@ -102,7 +107,7 @@ export function createApp(prisma: AppPrisma) {
   }
 
   // Products router is always present — other routers depend on the product model.
-  app.use("/products", createProductsRouter(prisma, requireAuth));
+  app.use("/products", createProductsRouter(prisma, requireAuth, requireAdmin));
 
   // Must be registered last so it catches errors thrown by all routes above.
   app.use(jsonErrorHandler);

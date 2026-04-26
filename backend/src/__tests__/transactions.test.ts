@@ -71,6 +71,7 @@ type TestCase = {
 type TransactionPrismaStub = {
   product: {
     findMany: () => Promise<Product[]>
+    count: () => Promise<number>
     findUnique: (args: { where: { id: number } }) => Promise<Product | null>
     create: () => Promise<never>
     update: (args: {
@@ -84,7 +85,8 @@ type TransactionPrismaStub = {
     delete: () => Promise<never>
   }
   transaction: {
-    findMany: (args: { orderBy: { id: 'desc' }; include: TransactionInclude }) => Promise<Transaction[]>
+    findMany: (args: { orderBy: { id: 'desc' }; include: TransactionInclude; skip?: number; take?: number }) => Promise<Transaction[]>
+    count: () => Promise<number>
     findUnique: (args: { where: { id: number }; include: TransactionInclude }) => Promise<Transaction | null>
     create: (args: { data: TransactionCreateData }) => Promise<Transaction>
     // Widened to support invoiceNumber (create flow), status and notes (void flow).
@@ -101,7 +103,8 @@ type TransactionPrismaStub = {
     create: (args: { data: Omit<Payment, 'id'> }) => Promise<Payment>
   }
   stockMovement: {
-    findMany: () => Promise<StockMovement[]>
+    findMany: (args?: { where?: { productId?: number }; orderBy?: { id: 'desc' }; skip?: number; take?: number }) => Promise<StockMovement[]>
+    count: (args?: { where?: { productId?: number } }) => Promise<number>
     create: (args: { data: Omit<StockMovement, 'id'> }) => Promise<StockMovement>
   }
   $transaction: <T>(run: (tx: TransactionPrismaStub) => Promise<T>) => Promise<T>
@@ -143,6 +146,9 @@ function createPrismaStub(seed: {
     product: {
       async findMany() {
         return [...products].sort((left, right) => left.id - right.id)
+      },
+      async count() {
+        return products.length
       },
       async findUnique({ where }) {
         return products.find((product) => product.id === where.id) ?? null
@@ -196,8 +202,13 @@ function createPrismaStub(seed: {
       },
     },
     transaction: {
-      async findMany() {
-        return [...transactions].sort((left, right) => right.id - left.id).map(withRelations)
+      async findMany({ skip, take }: { skip?: number; take?: number } = {}) {
+        const sorted = [...transactions].sort((left, right) => right.id - left.id).map(withRelations)
+        const start = skip ?? 0
+        return take !== undefined ? sorted.slice(start, start + take) : sorted.slice(start)
+      },
+      async count() {
+        return transactions.length
       },
       async findUnique({ where }) {
         const transaction = transactions.find((item) => item.id === where.id)
@@ -237,8 +248,13 @@ function createPrismaStub(seed: {
       },
     },
     stockMovement: {
-      async findMany() {
-        return [...stockMovements].sort((left, right) => right.id - left.id)
+      async findMany(args?: { skip?: number; take?: number }) {
+        const sorted = [...stockMovements].sort((left, right) => right.id - left.id)
+        const start = args?.skip ?? 0
+        return args?.take !== undefined ? sorted.slice(start, start + args.take) : sorted.slice(start)
+      },
+      async count() {
+        return stockMovements.length
       },
       async create({ data }) {
         const movement = { id: nextStockMovementId++, ...data }
@@ -376,10 +392,10 @@ const tests: TestCase[] = [
 
         const transactionsResponse = await fetch(`${baseUrl}/transactions`)
         const transactions = await transactionsResponse.json()
-        assert.equal(transactions[0].invoiceNumber, 'INV-000001')
+        assert.equal(transactions.data[0].invoiceNumber, 'INV-000001')
 
         const stockResponse = await fetch(`${baseUrl}/stock-movements`)
-        assert.deepEqual(await stockResponse.json(), [
+        assert.deepEqual((await stockResponse.json()).data, [
           {
             id: 2,
             productId: 2,
@@ -502,7 +518,7 @@ const tests: TestCase[] = [
 
         assert.equal(response.status, 200)
         const body = await response.json()
-        assert.deepEqual(body.map((transaction: Transaction) => transaction.id), [2, 1])
+        assert.deepEqual(body.data.map((transaction: Transaction) => transaction.id), [2, 1])
       })
     },
   },
@@ -557,7 +573,7 @@ const tests: TestCase[] = [
         assert.equal(body.notes, 'wrong item')
 
         const stockResponse = await fetch(`${baseUrl}/stock-movements`)
-        assert.deepEqual(await stockResponse.json(), [
+        assert.deepEqual((await stockResponse.json()).data, [
           {
             id: 1,
             productId: 1,

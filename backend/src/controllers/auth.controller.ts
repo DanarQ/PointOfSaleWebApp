@@ -2,11 +2,7 @@
 // All business logic (validation, hashing, JWT) lives in the service.
 // Controllers only translate service results into HTTP responses.
 import type { Request, Response } from 'express'
-import {
-  createAuthService,
-  parseBearerToken,
-  type AuthPrisma,
-} from '../services/auth.service.js'
+import { createAuthService, parseBearerToken, type AuthPrisma } from '../services/auth.service.js'
 
 export function createAuthController(prisma: AuthPrisma) {
   const authService = createAuthService(prisma)
@@ -38,6 +34,18 @@ export function createAuthController(prisma: AuthPrisma) {
     async me(req: Request, res: Response) {
       // parseBearerToken strips "Bearer " from the Authorization header value.
       const result = await authService.getCurrentUser(parseBearerToken(req.header('authorization')))
+
+      if (!result.ok) {
+        res.status(result.status).json({ error: result.error })
+        return
+      }
+
+      res.json(result.data)
+    },
+
+    // POST /auth/refresh — accepts { refreshToken } and returns a new token pair.
+    async refresh(req: Request, res: Response) {
+      const result = await authService.refresh(req.body)
 
       if (!result.ok) {
         res.status(result.status).json({ error: result.error })

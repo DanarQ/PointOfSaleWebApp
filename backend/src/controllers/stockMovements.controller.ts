@@ -7,15 +7,23 @@ import {
   parseProductId,
   type StockMovementPrisma,
 } from '../services/stockMovements.service.js'
+import { parsePagination } from '../utils/pagination.js'
 
 export function createStockMovementsController(prisma: StockMovementPrisma) {
   const stockMovementsService = createStockMovementsService(prisma)
 
   return {
-    // GET /stock-movements — all movements across all products, newest first.
-    async listStockMovements(_req: Request, res: Response) {
-      const stockMovements = await stockMovementsService.listStockMovements()
-      res.json(stockMovements)
+    // GET /stock-movements — paginated, newest first. Supports ?page=&limit=
+    async listStockMovements(req: Request, res: Response) {
+      const pagination = parsePagination(req.query as Record<string, unknown>)
+
+      if ('error' in pagination) {
+        res.status(400).json({ error: pagination.error })
+        return
+      }
+
+      const result = await stockMovementsService.listStockMovements(pagination.value)
+      res.json(result)
     },
 
     // POST /stock-movements — manually record a stock-in or stock-out.

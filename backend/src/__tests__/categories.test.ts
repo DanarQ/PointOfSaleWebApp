@@ -25,6 +25,9 @@ function createPrismaStub(seed: Category[] = []) {
       async findMany() {
         return []
       },
+      async count() {
+        return 0
+      },
       async findUnique() {
         return null
       },
@@ -39,8 +42,13 @@ function createPrismaStub(seed: Category[] = []) {
       },
     },
     category: {
-      async findMany() {
-        return [...categories].sort((left, right) => left.id - right.id)
+      async findMany({ skip, take }: { skip?: number; take?: number } = {}) {
+        const sorted = [...categories].sort((left, right) => left.id - right.id)
+        const start = skip ?? 0
+        return take !== undefined ? sorted.slice(start, start + take) : sorted.slice(start)
+      },
+      async count() {
+        return categories.length
       },
       async findUnique({ where }: { where: { id?: number; slug?: string } }) {
         if (where.id !== undefined) {
@@ -144,7 +152,7 @@ async function withServer(
 
 const tests: TestCase[] = [
   {
-    name: 'GET /categories returns categories ordered by id',
+    name: 'GET /categories returns categories ordered by id with pagination envelope',
     async run() {
       const { createApp } = await import('../app.js')
       const app = createApp(
@@ -158,10 +166,12 @@ const tests: TestCase[] = [
         const response = await fetch(`${baseUrl}/categories`)
 
         assert.equal(response.status, 200)
-        assert.deepEqual(await response.json(), [
+        const body = await response.json()
+        assert.deepEqual(body.data, [
           { id: 1, name: 'Drink', slug: 'drink' },
           { id: 2, name: 'Food', slug: 'food' },
         ])
+        assert.equal(body.pagination.total, 2)
       })
     },
   },

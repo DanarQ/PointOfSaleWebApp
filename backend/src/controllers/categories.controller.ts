@@ -5,14 +5,22 @@ import {
   parseCategoryId,
   type CategoryPrisma,
 } from "../services/categories.service.js";
+import { parsePagination } from "../utils/pagination.js";
 
 export function createCategoriesController(prisma: CategoryPrisma) {
   const categoriesService = createCategoriesService(prisma);
 
   return {
-    async listCategories(_req: Request, res: Response) {
-      const categories = await categoriesService.listCategories();
-      res.json(categories);
+    async listCategories(req: Request, res: Response) {
+      const pagination = parsePagination(req.query as Record<string, unknown>);
+
+      if ("error" in pagination) {
+        res.status(400).json({ error: pagination.error });
+        return;
+      }
+
+      const result = await categoriesService.listCategories(pagination.value);
+      res.json(result);
     },
 
     async createCategory(req: Request, res: Response) {

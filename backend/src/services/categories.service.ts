@@ -1,6 +1,7 @@
 // Categories service — manages product categories with slug-based uniqueness.
 // Slugs are auto-generated from the category name and used as the unique key.
 import { isPrismaUniqueConstraintError } from '../utils/prismaErrors.js'
+import { getPaginationArgs, buildPaginatedResponse, type PaginationParams } from '../utils/pagination.js'
 
 type CategoryRecord = {
   id: number
@@ -16,7 +17,8 @@ type CategoryData = {
 // Minimal prisma interface for categories.
 export type CategoryPrisma = {
   category: {
-    findMany: (args: { orderBy: { id: 'asc' } }) => Promise<CategoryRecord[]>
+    findMany: (args: { orderBy: { id: 'asc' }; skip?: number; take?: number }) => Promise<CategoryRecord[]>
+    count: (args?: Record<string, never>) => Promise<number>
     findUnique: (args: { where: { id: number } } | { where: { slug: string } }) => Promise<CategoryRecord | null>
     create: (args: { data: CategoryData }) => Promise<CategoryRecord>
     update: (args: { where: { id: number }; data: CategoryData }) => Promise<CategoryRecord | null>
@@ -83,8 +85,15 @@ function parseCategoryBody(body: unknown): CategoryServiceResult<CategoryData> {
 
 export function createCategoriesService(prisma: CategoryPrisma) {
   return {
-    async listCategories() {
-      return prisma.category.findMany({ orderBy: { id: 'asc' } })
+    async listCategories(pagination: PaginationParams = { page: 1, limit: 20 }) {
+      const { skip, take } = getPaginationArgs(pagination.page, pagination.limit)
+
+      const [data, total] = await Promise.all([
+        prisma.category.findMany({ orderBy: { id: 'asc' }, skip, take }),
+        prisma.category.count({}),
+      ])
+
+      return buildPaginatedResponse(data, total, pagination.page, pagination.limit)
     },
 
     async createCategory(body: unknown): Promise<CategoryServiceResult<CategoryRecord>> {

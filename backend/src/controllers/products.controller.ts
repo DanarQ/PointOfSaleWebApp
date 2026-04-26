@@ -8,22 +8,31 @@ import {
   parseProductListFilters,
   type ProductPrisma,
 } from '../services/products.service.js'
+import { parsePagination } from '../utils/pagination.js'
 
 export function createProductsController(prisma: ProductPrisma) {
   const productsService = createProductsService(prisma)
 
   return {
-    // GET /products — supports ?isActive=true|false&search=foo&categoryId=1
+    // GET /products — supports ?isActive=true|false&search=foo&categoryId=1&page=1&limit=20
     async listProducts(req: Request, res: Response) {
-      const filters = parseProductListFilters(req.query as Record<string, unknown>)
+      const query = req.query as Record<string, unknown>
+      const filters = parseProductListFilters(query)
 
       if ('error' in filters) {
         res.status(400).json({ error: filters.error })
         return
       }
 
-      const products = await productsService.listProducts(filters.value)
-      res.json(products)
+      const pagination = parsePagination(query)
+
+      if ('error' in pagination) {
+        res.status(400).json({ error: pagination.error })
+        return
+      }
+
+      const result = await productsService.listProducts(filters.value, pagination.value)
+      res.json(result)
     },
 
     async getProduct(req: Request, res: Response) {

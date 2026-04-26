@@ -83,6 +83,9 @@ const emptyProductPrisma = {
     async findMany() {
       return []
     },
+    async count() {
+      return 0
+    },
     async findUnique() {
       return null
     },
@@ -120,6 +123,7 @@ const tests: TestCase[] = [
         assert.equal(body.user.role, 'user')
         assert.equal(body.user.password, undefined)
         assert.equal(typeof body.token, 'string')
+        assert.equal(typeof body.refreshToken, 'string')
       })
     },
   },
@@ -177,6 +181,7 @@ const tests: TestCase[] = [
         assert.equal(body.user.role, 'admin')
         assert.equal(body.user.password, undefined)
         assert.equal(typeof body.token, 'string')
+        assert.equal(typeof body.refreshToken, 'string')
       })
     },
   },
@@ -299,6 +304,83 @@ const tests: TestCase[] = [
 
         assert.equal(response.status, 401)
         assert.deepEqual(await response.json(), { error: 'invalid authorization token' })
+      })
+    },
+  },
+  {
+    name: 'POST /auth/refresh returns new token pair for valid refresh token',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const { createRefreshToken } = await import('../routes/auth.js')
+      const app = createApp({
+        ...emptyProductPrisma,
+        ...createAuthPrismaStub([
+          { id: 1, email: 'cashier@example.com', password: 'hash', role: 'user' },
+        ]),
+      })
+
+      await withServer(app, async (baseUrl) => {
+        const refreshToken = createRefreshToken({ id: 1, email: 'cashier@example.com', role: 'user' })
+        const response = await fetch(`${baseUrl}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        })
+
+        assert.equal(response.status, 200)
+        const body = await response.json()
+        assert.equal(typeof body.token, 'string')
+        assert.equal(typeof body.refreshToken, 'string')
+        assert.equal(body.user.email, 'cashier@example.com')
+      })
+    },
+  },
+  {
+    name: 'POST /auth/refresh rejects an access token used as refresh token',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const { createAuthToken } = await import('../routes/auth.js')
+      const app = createApp({
+        ...emptyProductPrisma,
+        ...createAuthPrismaStub([
+          { id: 1, email: 'cashier@example.com', password: 'hash', role: 'user' },
+        ]),
+      })
+
+      await withServer(app, async (baseUrl) => {
+        const accessToken = createAuthToken({ id: 1, email: 'cashier@example.com', role: 'user' })
+        const response = await fetch(`${baseUrl}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ refreshToken: accessToken }),
+        })
+
+        assert.equal(response.status, 401)
+        assert.deepEqual(await response.json(), { error: 'invalid refresh token' })
+      })
+    },
+  },
+  {
+    name: 'DELETE /products/:id with non-admin token returns 403',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const { createAuthToken } = await import('../routes/auth.js')
+      const app = createApp({
+        ...emptyProductPrisma,
+        ...createAuthPrismaStub([
+          { id: 1, email: 'cashier@example.com', password: 'hash', role: 'user' },
+        ]),
+      })
+
+      await withServer(app, async (baseUrl) => {
+        const token = createAuthToken({ id: 1, email: 'cashier@example.com', role: 'user' })
+        const response = await fetch(`${baseUrl}/products/1`, {
+          method: 'DELETE',
+          headers: { authorization: `Bearer ${token}` },
+        })
+
+        assert.equal(response.status, 403)
+        assert.deepEqual(await response.json(), { error: 'insufficient permissions' })
       })
     },
   },

@@ -1,6 +1,7 @@
 // Products service — handles CRUD for products including optional category linking.
 // Categories are managed via Prisma's connectOrCreate so the client only needs
 // to send a category name string; the service handles slug generation and creation.
+import { getPaginationArgs, buildPaginatedResponse, type PaginationParams } from '../utils/pagination.js'
 
 type CategoryRecord = {
   id: number
@@ -65,6 +66,8 @@ type ProductFindManyArgs = {
   where?: ProductWhereInput
   orderBy: { id: 'asc' }
   include: ProductInclude
+  skip?: number
+  take?: number
 }
 
 type ProductFindUniqueArgs = {
@@ -86,6 +89,7 @@ type ProductUpdateData = Omit<ProductData, 'category'> & {
 export type ProductPrisma = {
   product: {
     findMany: (args: ProductFindManyArgs) => Promise<ProductRecord[]>
+    count: (args: { where?: ProductWhereInput }) => Promise<number>
     findUnique: (args: ProductFindUniqueArgs) => Promise<ProductRecord | null>
     create: (args: { data: ProductCreateData; include: ProductInclude }) => Promise<ProductRecord>
     update: (args: {
@@ -403,17 +407,23 @@ function toProductUpdateData(data: ProductData): ProductUpdateData {
 
 export function createProductsService(prisma: ProductPrisma) {
   return {
-    // Returns all products by default. When filters are passed, the result is narrowed:
-    //   - isActive: only active or only inactive products
-    //   - categoryId: products in that category only
-    //   - search: products whose name, sku, or barcode contains the term (case-insensitive)
-    async listProducts(filters: ProductListFilters = {}) {
+    // Returns a paginated product list. Filters narrow the result set before pagination.
+    async listProducts(filters: ProductListFilters = {}, pagination: PaginationParams = { page: 1, limit: 20 }) {
       const where = buildProductWhere(filters)
-      return prisma.product.findMany({
-        ...(where ? { where } : {}),
-        orderBy: { id: 'asc' },
-        include: productInclude,
-      })
+      const { skip, take } = getPaginationArgs(pagination.page, pagination.limit)
+
+      const [data, total] = await Promise.all([
+        prisma.product.findMany({
+          ...(where ? { where } : {}),
+          orderBy: { id: 'asc' },
+          include: productInclude,
+          skip,
+          take,
+        }),
+        prisma.product.count({ ...(where ? { where } : {}) }),
+      ])
+
+      return buildPaginatedResponse(data, total, pagination.page, pagination.limit)
     },
 
     async getProduct(id: number): Promise<ProductServiceResult<ProductRecord>> {

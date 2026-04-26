@@ -12,7 +12,7 @@ REST API untuk aplikasi Point of Sale. Dibangun dengan **Express 5**, **Prisma 7
 - [Autentikasi](#autentikasi)
 - [Endpoints](#endpoints)
   - [Health](#health)
-  - [Auth](#auth)
+  - [Auth](#auth) — register, login, refresh, me
   - [Categories](#categories)
   - [Products](#products)
   - [Stock Movements](#stock-movements)
@@ -110,13 +110,36 @@ npm start
 
 ## Format Response
 
-### Sukses
+### Sukses — single resource
 
-Response body langsung berisi data (object atau array), tanpa wrapper `{ data: ... }`.
+Response body langsung berisi object, tanpa wrapper.
 
 ```json
 { "id": 1, "name": "Kopi Susu", "price": 15000 }
 ```
+
+### Sukses — list / koleksi
+
+Semua endpoint `GET` yang mengembalikan array dibungkus dalam **pagination envelope**:
+
+```json
+{
+  "data": [ ... ],
+  "pagination": {
+    "total": 100,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 5
+  }
+}
+```
+
+**Query params pagination** (berlaku di semua list endpoint):
+
+| Param | Default | Maksimum | Keterangan |
+|---|---|---|---|
+| `page` | `1` | — | Nomor halaman, dimulai dari 1 |
+| `limit` | `20` | `100` | Jumlah item per halaman |
 
 ### Error
 
@@ -130,6 +153,7 @@ Semua error mengembalikan format yang sama:
 |---|---|
 | `400` | Request body tidak valid, stok tidak cukup, data tidak konsisten |
 | `401` | Token tidak ada, expired, atau tidak valid |
+| `403` | Token valid tapi role tidak punya akses |
 | `404` | Resource tidak ditemukan |
 | `409` | Konflik data (email sudah terdaftar, kategori sudah ada) |
 | `500` | Error server yang tidak terduga |
@@ -138,13 +162,26 @@ Semua error mengembalikan format yang sama:
 
 ## Autentikasi
 
-API menggunakan **JWT Bearer Token**.
+API menggunakan **dua token JWT**:
+
+| Token | Expiry | Kegunaan |
+|---|---|---|
+| **Access token** (`token`) | 1 jam | Dikirim di header `Authorization: Bearer <token>` untuk setiap request |
+| **Refresh token** (`refreshToken`) | 7 hari | Dikirim ke `POST /auth/refresh` untuk mendapatkan token baru |
 
 ### Cara mendapatkan token
 
-Lakukan register atau login. Token dikembalikan di field `token`.
+Lakukan register atau login. Kedua token dikembalikan sekaligus:
 
-### Cara memakai token
+```json
+{
+  "user": { "id": 1, "email": "kasir@toko.com", "role": "user" },
+  "token": "eyJhbGciOiJIUzI1Ni...",
+  "refreshToken": "eyJhbGciOiJIUzI1Ni..."
+}
+```
+
+### Cara memakai access token
 
 Sertakan di header setiap request yang memerlukan autentikasi:
 
@@ -152,25 +189,33 @@ Sertakan di header setiap request yang memerlukan autentikasi:
 Authorization: Bearer <token>
 ```
 
-### Endpoint yang membutuhkan token
+### Cara refresh token
 
-Semua endpoint **write** (POST, PUT, DELETE) memerlukan token. Endpoint **read** (GET) terbuka.
+Ketika access token sudah expired, kirim refresh token ke `POST /auth/refresh`. Server mengembalikan pasangan token baru (token lama tidak bisa dipakai lagi).
 
-| Method & Path | Perlu Token |
+### Akses berdasarkan role
+
+| Method & Path | Role yang diizinkan |
 |---|---|
-| `POST /products`, `PUT /products/:id`, `DELETE /products/:id` | ✅ |
-| `POST /categories`, `PUT /categories/:id`, `DELETE /categories/:id` | ✅ |
-| `POST /stock-movements` | ✅ |
-| `POST /transactions`, `POST /transactions/:id/void` | ✅ |
-| `GET /auth/me` | ✅ |
-| Semua endpoint GET lainnya | ❌ |
+| `GET /auth/me` | semua (perlu token) |
+| `POST /auth/refresh` | semua |
+| `POST /products`, `PUT /products/:id` | `user`, `admin` |
+| `DELETE /products/:id` | `admin` saja |
+| `POST /categories`, `PUT /categories/:id` | `user`, `admin` |
+| `DELETE /categories/:id` | `admin` saja |
+| `POST /stock-movements` | `user`, `admin` |
+| `POST /transactions` | `user`, `admin` |
+| `POST /transactions/:id/void` | `admin` saja |
+| Semua endpoint `GET` | terbuka (tidak perlu token) |
 
-Jika token tidak ada atau invalid, response: `401 { "error": "authorization token is required" }` atau `401 { "error": "invalid authorization token" }`.
+**Error autentikasi:**
+- `401 { "error": "authorization token is required" }` — tidak ada token
+- `401 { "error": "invalid authorization token" }` — token rusak atau expired
+- `403 { "error": "insufficient permissions" }` — token valid tapi role tidak cukup
 
-### Catatan
+### Role default
 
-- Token berlaku selama **8 jam**, belum ada mekanisme refresh — user harus login ulang setelah expired
-- Field `role` ada di JWT payload (default `"user"`) tapi belum dipakai untuk membatasi akses per role
+User baru yang mendaftar mendapat `role: "user"`. Untuk memberi role `admin`, ubah langsung di database atau buat endpoint admin tersendiri di sisi aplikasi.
 
 ---
 

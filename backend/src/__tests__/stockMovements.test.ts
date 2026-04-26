@@ -31,6 +31,7 @@ type TestCase = {
 type StockPrismaStub = {
   product: {
     findMany: () => Promise<Product[]>
+    count: () => Promise<number>
     findUnique: (args: { where: { id: number } }) => Promise<Product | null>
     create: () => Promise<never>
     update: (args: {
@@ -44,7 +45,8 @@ type StockPrismaStub = {
     delete: () => Promise<never>
   }
   stockMovement: {
-    findMany: (args?: { where?: { productId?: number }; orderBy?: { id: 'desc' } }) => Promise<StockMovement[]>
+    findMany: (args?: { where?: { productId?: number }; orderBy?: { id: 'desc' }; skip?: number; take?: number }) => Promise<StockMovement[]>
+    count: (args?: { where?: { productId?: number } }) => Promise<number>
     create: (args: { data: Omit<StockMovement, 'id'> }) => Promise<StockMovement>
   }
   $transaction: <T>(run: (tx: StockPrismaStub) => Promise<T>) => Promise<T>
@@ -64,6 +66,9 @@ function createPrismaStub(seed: { products?: Product[]; stockMovements?: StockMo
     product: {
       async findMany() {
         return [...products].sort((left, right) => left.id - right.id)
+      },
+      async count() {
+        return products.length
       },
       async findUnique({ where }: { where: { id: number } }) {
         return products.find((product) => product.id === where.id) ?? null
@@ -131,13 +136,19 @@ function createPrismaStub(seed: { products?: Product[]; stockMovements?: StockMo
       },
     },
     stockMovement: {
-      async findMany(args?: { where?: { productId?: number }; orderBy?: { id: 'desc' } }) {
+      async findMany(args?: { where?: { productId?: number }; orderBy?: { id: 'desc' }; skip?: number; take?: number }) {
         const filtered =
           args?.where?.productId === undefined
             ? stockMovements
             : stockMovements.filter((movement) => movement.productId === args.where?.productId)
 
-        return [...filtered].sort((left, right) => right.id - left.id)
+        const sorted = [...filtered].sort((left, right) => right.id - left.id)
+        const start = args?.skip ?? 0
+        return args?.take !== undefined ? sorted.slice(start, start + args.take) : sorted.slice(start)
+      },
+      async count(args?: { where?: { productId?: number } }) {
+        if (args?.where?.productId === undefined) return stockMovements.length
+        return stockMovements.filter((m) => m.productId === args.where?.productId).length
       },
       async create({ data }: { data: Omit<StockMovement, 'id'> }) {
         const movement = { id: nextStockMovementId++, ...data }
@@ -197,7 +208,7 @@ async function withServer(
 
 const tests: TestCase[] = [
   {
-    name: 'GET /stock-movements returns movements ordered newest first',
+    name: 'GET /stock-movements returns movements ordered newest first with pagination envelope',
     async run() {
       const { createApp } = await import('../app.js')
       const app = createApp(
@@ -213,10 +224,12 @@ const tests: TestCase[] = [
         const response = await fetch(`${baseUrl}/stock-movements`)
 
         assert.equal(response.status, 200)
-        assert.deepEqual(await response.json(), [
+        const body = await response.json()
+        assert.deepEqual(body.data, [
           { id: 2, productId: 1, type: 'out', quantity: 2, stockBefore: 5, stockAfter: 3 },
           { id: 1, productId: 1, type: 'in', quantity: 5, stockBefore: 0, stockAfter: 5 },
         ])
+        assert.equal(body.pagination.total, 2)
       })
     },
   },

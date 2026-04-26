@@ -1,6 +1,7 @@
 // Stock movements service — tracks every stock change (in/out) for each product.
 // Creating a movement also updates product.stock atomically inside a DB transaction.
 import { isPrismaRecordNotFoundError } from '../utils/prismaErrors.js'
+import { getPaginationArgs, buildPaginatedResponse, type PaginationParams } from '../utils/pagination.js'
 
 type ProductStockRecord = {
   id: number
@@ -49,7 +50,10 @@ export type StockMovementPrisma = StockMovementTransactionPrisma & {
     findMany: (args: {
       where?: { productId: number }
       orderBy: { id: 'desc' }
+      skip?: number
+      take?: number
     }) => Promise<StockMovementRecord[]>
+    count: (args?: { where?: { productId: number } }) => Promise<number>
   }
   $transaction: <T>(run: (tx: StockMovementTransactionPrisma) => Promise<T>) => Promise<T>
 }
@@ -191,9 +195,16 @@ function parseStockMovementBody(body: unknown): StockMovementServiceResult<Stock
 
 export function createStockMovementsService(prisma: StockMovementPrisma) {
   return {
-    // GET /stock-movements — all movements, newest first.
-    async listStockMovements() {
-      return prisma.stockMovement.findMany({ orderBy: { id: 'desc' } })
+    // GET /stock-movements — paginated, newest first.
+    async listStockMovements(pagination: PaginationParams = { page: 1, limit: 20 }) {
+      const { skip, take } = getPaginationArgs(pagination.page, pagination.limit)
+
+      const [data, total] = await Promise.all([
+        prisma.stockMovement.findMany({ orderBy: { id: 'desc' }, skip, take }),
+        prisma.stockMovement.count(),
+      ])
+
+      return buildPaginatedResponse(data, total, pagination.page, pagination.limit)
     },
 
     // GET /products/:id/stock-movements — confirms the product exists first.

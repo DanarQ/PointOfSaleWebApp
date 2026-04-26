@@ -1,4 +1,5 @@
 // Transactions service — handles the full checkout flow.
+import { getPaginationArgs, buildPaginatedResponse, type PaginationParams } from '../utils/pagination.js'
 // Creating a transaction is one atomic DB operation that:
 //   1. Resolves product prices and validates stock
 //   2. Calculates subtotals, total, change
@@ -94,7 +95,8 @@ type TransactionPrismaClient = {
     }) => Promise<{ count: number }>
   }
   transaction: {
-    findMany: (args: { orderBy: { id: 'desc' }; include: TransactionInclude }) => Promise<TransactionRecord[]>
+    findMany: (args: { orderBy: { id: 'desc' }; include: TransactionInclude; skip?: number; take?: number }) => Promise<TransactionRecord[]>
+    count: (args?: Record<string, never>) => Promise<number>
     findUnique: (args: { where: { id: number }; include: TransactionInclude }) => Promise<TransactionRecord | null>
     create: (args: { data: TransactionCreateData }) => Promise<TransactionRecord>
     // Widened from { invoiceNumber: string } to support updating status and notes (used by voidTransaction).
@@ -358,12 +360,21 @@ function createInvoiceNumber(nextId: number) {
 
 export function createTransactionsService(prisma: TransactionPrisma) {
   return {
-    // GET /transactions — all transactions with items and payments, newest first.
-    async listTransactions() {
-      return prisma.transaction.findMany({
-        orderBy: { id: 'desc' },
-        include: transactionInclude,
-      })
+    // GET /transactions — paginated, newest first.
+    async listTransactions(pagination: PaginationParams = { page: 1, limit: 20 }) {
+      const { skip, take } = getPaginationArgs(pagination.page, pagination.limit)
+
+      const [data, total] = await Promise.all([
+        prisma.transaction.findMany({
+          orderBy: { id: 'desc' },
+          include: transactionInclude,
+          skip,
+          take,
+        }),
+        prisma.transaction.count({}),
+      ])
+
+      return buildPaginatedResponse(data, total, pagination.page, pagination.limit)
     },
 
     async getTransaction(id: number): Promise<TransactionServiceResult<TransactionRecord>> {

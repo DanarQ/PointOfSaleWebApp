@@ -83,6 +83,11 @@ function createPrismaStub(seed: Product[] = []) {
   let nextCategoryId =
     categories.reduce((maxId, category) => Math.max(maxId, category.id), 0) + 1
 
+  function applyPagination<T>(list: T[], skip?: number, take?: number): T[] {
+    const start = skip ?? 0
+    return take !== undefined ? list.slice(start, start + take) : list.slice(start)
+  }
+
   function resolveProductData(data: ProductData) {
     const { category, ...productData } = data
 
@@ -107,10 +112,14 @@ function createPrismaStub(seed: Product[] = []) {
 
   return {
     product: {
-      async findMany({ where }: { where?: ProductWhereInput } = {}) {
-        return [...products]
+      async findMany({ where, skip, take }: { where?: ProductWhereInput; skip?: number; take?: number } = {}) {
+        const filtered = [...products]
           .filter((product) => matchesWhere(product, where))
           .sort((left, right) => left.id - right.id)
+        return applyPagination(filtered, skip, take)
+      },
+      async count({ where }: { where?: ProductWhereInput } = {}) {
+        return [...products].filter((product) => matchesWhere(product, where)).length
       },
       async findUnique({ where }: { where: { id: number } }) {
         return products.find((product) => product.id === where.id) ?? null
@@ -203,7 +212,7 @@ const tests: TestCase[] = [
     },
   },
   {
-    name: 'GET /products returns products ordered by id',
+    name: 'GET /products returns products ordered by id with pagination envelope',
     async run() {
       const { createApp } = await import('../app.js')
       const app = createApp(
@@ -216,10 +225,13 @@ const tests: TestCase[] = [
         const response = await fetch(`${baseUrl}/products`)
 
         assert.equal(response.status, 200)
-        assert.deepEqual(await response.json(), [
+        const body = await response.json()
+        assert.deepEqual(body.data, [
           { id: 1, name: 'Coffee', price: 15000 },
           { id: 2, name: 'Tea', price: 8000 },
         ])
+        assert.equal(body.pagination.total, 2)
+        assert.equal(body.pagination.page, 1)
       })
     },
   },
@@ -483,8 +495,8 @@ const tests: TestCase[] = [
 
         assert.equal(response.status, 200)
         const body = await response.json()
-        assert.equal(body.length, 1)
-        assert.equal(body[0].id, 1)
+        assert.equal(body.data.length, 1)
+        assert.equal(body.data[0].id, 1)
       })
     },
   },
@@ -503,8 +515,8 @@ const tests: TestCase[] = [
 
         assert.equal(response.status, 200)
         const body = await response.json()
-        assert.equal(body.length, 1)
-        assert.equal(body[0].id, 2)
+        assert.equal(body.data.length, 1)
+        assert.equal(body.data[0].id, 2)
       })
     },
   },
@@ -537,7 +549,7 @@ const tests: TestCase[] = [
 
         assert.equal(response.status, 200)
         const body = await response.json()
-        assert.deepEqual(body.map((p: Product) => p.id), [1, 3])
+        assert.deepEqual(body.data.map((p: Product) => p.id), [1, 3])
       })
     },
   },
@@ -556,8 +568,8 @@ const tests: TestCase[] = [
 
         assert.equal(response.status, 200)
         const body = await response.json()
-        assert.equal(body.length, 1)
-        assert.equal(body[0].id, 1)
+        assert.equal(body.data.length, 1)
+        assert.equal(body.data[0].id, 1)
       })
     },
   },
@@ -586,8 +598,8 @@ const tests: TestCase[] = [
 
         assert.equal(response.status, 200)
         const body = await response.json()
-        assert.equal(body.length, 1)
-        assert.equal(body[0].id, 1)
+        assert.equal(body.data.length, 1)
+        assert.equal(body.data[0].id, 1)
       })
     },
   },

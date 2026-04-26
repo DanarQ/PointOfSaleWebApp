@@ -1,6 +1,8 @@
-// Auth service — handles registration, login, and token verification.
+// Auth service — handles registration, login, token verification, and token refresh.
 // Password hashing uses PBKDF2 (Node built-in crypto), not bcrypt.
-// JWT is used for stateless session tokens.
+// Two-token scheme: short-lived access token (1 h) + long-lived refresh token (7 d).
+// Both tokens are JWTs signed with the same secret; the refresh token carries
+// type: 'refresh' so it can never be used as an access token and vice-versa.
 import { pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto'
 import jwt from 'jsonwebtoken'
 
@@ -36,6 +38,8 @@ type AuthTokenPayload = {
   role: string
 }
 
+type RefreshTokenPayload = AuthTokenPayload & { type: 'refresh' }
+
 // User object safe to return to the client — password is excluded.
 type SafeAuthUser = {
   id: number
@@ -48,6 +52,8 @@ type SafeAuthUser = {
 type AuthServiceResult<T> =
   | { ok: true; data: T }
   | { ok: false; status: 400 | 401 | 409; error: string }
+
+type TokenPair = { user: SafeAuthUser; token: string; refreshToken: string }
 
 // PBKDF2 parameters. 120000 iterations is the OWASP recommended minimum for SHA-256.
 const passwordIterations = 120000
@@ -137,23 +143,30 @@ function verifyPassword(password: string, storedPassword: string) {
   return timingSafeEqual(hash, storedHashBuffer)
 }
 
-// Signs a JWT that expires in 8 hours. The client sends this as: Authorization: Bearer <token>
+// Signs an access token that expires in 1 hour.
+// The client sends this as: Authorization: Bearer <token>
 // Exported so tests can generate tokens without going through the full register/login flow.
 export function createAuthToken(payload: AuthTokenPayload) {
-  return jwt.sign(payload, getTokenSecret(), { expiresIn: '8h' })
+  return jwt.sign(payload, getTokenSecret(), { expiresIn: '1h' })
 }
 
-// Verifies the JWT signature and returns the payload, or null if invalid/expired.
+// Signs a refresh token that expires in 7 days.
+// The extra type: 'refresh' claim ensures it can never be accepted as an access token.
+export function createRefreshToken(payload: AuthTokenPayload) {
+  return jwt.sign({ ...payload, type: 'refresh' }, getTokenSecret(), { expiresIn: '7d' })
+}
+
+// Verifies an access token. Rejects tokens that carry type: 'refresh'.
 function verifyAuthToken(token: string): AuthTokenPayload | null {
   try {
     const payload = jwt.verify(token, getTokenSecret())
 
-    // Guard against a valid JWT that doesn't contain the expected fields.
     if (
       typeof payload !== 'object' ||
       !Number.isInteger(payload.id) ||
       typeof payload.email !== 'string' ||
-      typeof payload.role !== 'string'
+      typeof payload.role !== 'string' ||
+      (payload as { type?: unknown }).type === 'refresh'
     ) {
       return null
     }
@@ -162,6 +175,32 @@ function verifyAuthToken(token: string): AuthTokenPayload | null {
       id: payload.id,
       email: payload.email,
       role: payload.role,
+    }
+  } catch {
+    return null
+  }
+}
+
+// Verifies a refresh token. Only succeeds when type: 'refresh' is present.
+function verifyRefreshToken(token: string): RefreshTokenPayload | null {
+  try {
+    const payload = jwt.verify(token, getTokenSecret())
+
+    if (
+      typeof payload !== 'object' ||
+      !Number.isInteger(payload.id) ||
+      typeof payload.email !== 'string' ||
+      typeof payload.role !== 'string' ||
+      (payload as { type?: unknown }).type !== 'refresh'
+    ) {
+      return null
+    }
+
+    return {
+      id: payload.id,
+      email: payload.email,
+      role: payload.role,
+      type: 'refresh',
     }
   } catch {
     return null
@@ -179,10 +218,19 @@ export function parseBearerToken(header: string | undefined) {
 }
 
 export function createAuthService(prisma: AuthPrisma) {
+  function buildTokenPair(user: AuthUserRecord): TokenPair {
+    const safeUser = sanitizeUser(user)
+    return {
+      user: safeUser,
+      token: createAuthToken(safeUser),
+      refreshToken: createRefreshToken(safeUser),
+    }
+  }
+
   return {
-    // Creates a new user account and returns the user + a JWT token.
+    // Creates a new user account and returns the user + access/refresh tokens.
     // Returns 409 if the email is already registered.
-    async register(body: unknown): Promise<AuthServiceResult<{ user: SafeAuthUser; token: string }>> {
+    async register(body: unknown): Promise<AuthServiceResult<TokenPair>> {
       const parsedBody = parseAuthBody(body)
 
       if ('error' in parsedBody) {
@@ -203,21 +251,14 @@ export function createAuthService(prisma: AuthPrisma) {
           password: hashPassword(parsedBody.password),
         },
       })
-      const safeUser = sanitizeUser(user)
 
-      return {
-        ok: true,
-        data: {
-          user: safeUser,
-          token: createAuthToken(safeUser),
-        },
-      }
+      return { ok: true, data: buildTokenPair(user) }
     },
 
-    // Verifies credentials and returns the user + a new JWT token.
+    // Verifies credentials and returns the user + access/refresh tokens.
     // Returns 401 for both "email not found" and "wrong password" to avoid
     // leaking whether a given email is registered.
-    async login(body: unknown): Promise<AuthServiceResult<{ user: SafeAuthUser; token: string }>> {
+    async login(body: unknown): Promise<AuthServiceResult<TokenPair>> {
       const parsedBody = parseAuthBody(body)
 
       if ('error' in parsedBody) {
@@ -232,15 +273,35 @@ export function createAuthService(prisma: AuthPrisma) {
         return { ok: false, status: 401, error: 'invalid email or password' }
       }
 
-      const safeUser = sanitizeUser(user)
+      return { ok: true, data: buildTokenPair(user) }
+    },
 
-      return {
-        ok: true,
-        data: {
-          user: safeUser,
-          token: createAuthToken(safeUser),
-        },
+    // Issues a new access + refresh token pair from a valid refresh token.
+    // The old refresh token is implicitly invalidated by token rotation (client replaces it).
+    async refresh(body: unknown): Promise<AuthServiceResult<TokenPair>> {
+      if (!body || typeof body !== 'object') {
+        return { ok: false, status: 400, error: 'invalid request body' }
       }
+
+      const { refreshToken } = body as { refreshToken?: unknown }
+
+      if (typeof refreshToken !== 'string' || !refreshToken) {
+        return { ok: false, status: 400, error: 'refreshToken is required' }
+      }
+
+      const payload = verifyRefreshToken(refreshToken)
+
+      if (!payload) {
+        return { ok: false, status: 401, error: 'invalid refresh token' }
+      }
+
+      const user = await prisma.auth.findUnique({ where: { id: payload.id } })
+
+      if (!user) {
+        return { ok: false, status: 401, error: 'invalid refresh token' }
+      }
+
+      return { ok: true, data: buildTokenPair(user) }
     },
 
     // Validates the JWT from the Authorization header and returns the current user.

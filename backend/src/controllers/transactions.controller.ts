@@ -5,15 +5,23 @@ import {
   parseTransactionId,
   type TransactionPrisma,
 } from '../services/transactions.service.js'
+import { parsePagination } from '../utils/pagination.js'
 
 export function createTransactionsController(prisma: TransactionPrisma) {
   const transactionsService = createTransactionsService(prisma)
 
   return {
-    // GET /transactions — all transactions with items and payments, newest first.
-    async listTransactions(_req: Request, res: Response) {
-      const transactions = await transactionsService.listTransactions()
-      res.json(transactions)
+    // GET /transactions — paginated, newest first. Supports ?page=&limit=
+    async listTransactions(req: Request, res: Response) {
+      const pagination = parsePagination(req.query as Record<string, unknown>)
+
+      if ('error' in pagination) {
+        res.status(400).json({ error: pagination.error })
+        return
+      }
+
+      const result = await transactionsService.listTransactions(pagination.value)
+      res.json(result)
     },
 
     async getTransaction(req: Request, res: Response) {

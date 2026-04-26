@@ -7,19 +7,24 @@ import type { ProductPrisma } from '../services/products.service.js'
 
 export type { ProductPrisma } from '../services/products.service.js'
 
-export function createProductsRouter(prisma: ProductPrisma, requireAuth?: RequestHandler) {
+export function createProductsRouter(
+  prisma: ProductPrisma,
+  requireAuth?: RequestHandler,
+  requireAdmin?: RequestHandler,
+) {
   const router = Router()
   const productsController = createProductsController(prisma)
 
-  // Read endpoints — open by default. Add requireAuth here too if you want fully-locked APIs.
+  // Read endpoints — open by default.
   router.get('/', productsController.listProducts)
   router.get('/:id', productsController.getProduct)
 
-  // Spread into the route signature: if no middleware was provided, no extra handlers are added.
   const guard = requireAuth ? [requireAuth] : []
+  // DELETE requires admin role; create/update only require authentication.
+  const adminGuard = requireAuth && requireAdmin ? [requireAuth, requireAdmin] : guard
   router.post('/', ...guard, productsController.createProduct)
   router.put('/:id', ...guard, productsController.updateProduct)
-  router.delete('/:id', ...guard, productsController.deleteProduct)
+  router.delete('/:id', ...adminGuard, productsController.deleteProduct)
 
   return router
 }
