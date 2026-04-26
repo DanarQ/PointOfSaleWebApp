@@ -6,7 +6,7 @@ type ProductRecord = {
   price: number
   sku?: string | null
   barcode?: string | null
-  category?: string | null
+  category?: CategoryRecord | null
   description?: string | null
   imageUrl?: string | null
   stock?: number
@@ -15,12 +15,25 @@ type ProductRecord = {
   isActive?: boolean
 }
 
+type CategoryRecord = {
+  id: number
+  name: string
+  slug: string
+}
+
+type CategoryWriteData = {
+  connectOrCreate: {
+    where: { slug: string }
+    create: { name: string; slug: string }
+  }
+}
+
 type ProductData = {
   name: string
   price: number
   sku?: string | null
   barcode?: string | null
-  category?: string | null
+  category?: CategoryWriteData | null
   description?: string | null
   imageUrl?: string | null
   stock?: number
@@ -31,13 +44,39 @@ type ProductData = {
 
 export type ProductPrisma = {
   product: {
-    findMany: (args: { orderBy: { id: 'asc' } }) => Promise<ProductRecord[]>
-    findUnique: (args: { where: { id: number } }) => Promise<ProductRecord | null>
-    create: (args: { data: ProductData }) => Promise<ProductRecord>
-    update: (args: { where: { id: number }; data: ProductData }) => Promise<ProductRecord | null>
+    findMany: (args: ProductFindManyArgs) => Promise<ProductRecord[]>
+    findUnique: (args: ProductFindUniqueArgs) => Promise<ProductRecord | null>
+    create: (args: { data: ProductCreateData; include: ProductInclude }) => Promise<ProductRecord>
+    update: (args: {
+      where: { id: number }
+      data: ProductUpdateData
+      include: ProductInclude
+    }) => Promise<ProductRecord | null>
     delete: (args: { where: { id: number } }) => Promise<ProductRecord | null>
   }
 }
+
+type ProductInclude = { category: true }
+
+type ProductFindManyArgs = {
+  orderBy: { id: 'asc' }
+  include: ProductInclude
+}
+
+type ProductFindUniqueArgs = {
+  where: { id: number }
+  include: ProductInclude
+}
+
+type ProductCreateData = Omit<ProductData, 'category'> & {
+  category?: CategoryWriteData
+}
+
+type ProductUpdateData = Omit<ProductData, 'category'> & {
+  category?: CategoryWriteData | { disconnect: true }
+}
+
+const productInclude = { category: true } as const
 
 function parseProductId(rawId: string) {
   const id = Number(rawId)
@@ -51,7 +90,7 @@ function parseProductId(rawId: string) {
 
 function parseOptionalString(
   body: Record<string, unknown>,
-  fieldName: 'sku' | 'barcode' | 'category' | 'description' | 'imageUrl',
+  fieldName: 'sku' | 'barcode' | 'description' | 'imageUrl',
 ): { value?: string | null } | { error: string } {
   const value = body[fieldName]
 
@@ -69,6 +108,55 @@ function parseOptionalString(
 
   const normalizedValue = value.trim()
   return { value: normalizedValue || null }
+}
+
+function createSlug(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function createCategoryName(slug: string) {
+  return slug
+    .split('-')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
+
+function parseCategory(body: Record<string, unknown>): { value?: CategoryWriteData | null } | { error: string } {
+  const value = body.category
+
+  if (value === undefined) {
+    return {}
+  }
+
+  if (value === null) {
+    return { value: null }
+  }
+
+  if (typeof value !== 'string') {
+    return { error: 'category must be a string' }
+  }
+
+  const slug = createSlug(value)
+
+  if (!slug) {
+    return { value: null }
+  }
+
+  return {
+    value: {
+      connectOrCreate: {
+        where: { slug },
+        create: {
+          name: createCategoryName(slug),
+          slug,
+        },
+      },
+    },
+  }
 }
 
 function parseProductBody(body: unknown): { data: ProductData } | { error: string } {
@@ -93,7 +181,7 @@ function parseProductBody(body: unknown): { data: ProductData } | { error: strin
     price,
   }
 
-  for (const fieldName of ['sku', 'barcode', 'category', 'description', 'imageUrl'] as const) {
+  for (const fieldName of ['sku', 'barcode', 'description', 'imageUrl'] as const) {
     const parsedString = parseOptionalString(productBody, fieldName)
 
     if ('error' in parsedString) {
@@ -103,6 +191,16 @@ function parseProductBody(body: unknown): { data: ProductData } | { error: strin
     if ('value' in parsedString) {
       data[fieldName] = parsedString.value
     }
+  }
+
+  const parsedCategory = parseCategory(productBody)
+
+  if ('error' in parsedCategory) {
+    return { error: parsedCategory.error }
+  }
+
+  if ('value' in parsedCategory) {
+    data.category = parsedCategory.value
   }
 
   if (productBody.stock !== undefined) {
@@ -152,11 +250,35 @@ function parseProductBody(body: unknown): { data: ProductData } | { error: strin
   }
 }
 
+function toProductCreateData(data: ProductData): ProductCreateData {
+  const { category, ...productData } = data
+
+  if (!category) {
+    return productData
+  }
+
+  return { ...productData, category }
+}
+
+function toProductUpdateData(data: ProductData): ProductUpdateData {
+  const { category, ...productData } = data
+
+  if (category === undefined) {
+    return productData
+  }
+
+  if (category === null) {
+    return { ...productData, category: { disconnect: true } }
+  }
+
+  return { ...productData, category }
+}
+
 export function createProductsRouter(prisma: ProductPrisma) {
   const router = Router()
 
   router.get('/', async (_req, res) => {
-    const products = await prisma.product.findMany({ orderBy: { id: 'asc' } })
+    const products = await prisma.product.findMany({ orderBy: { id: 'asc' }, include: productInclude })
     res.json(products)
   })
 
@@ -168,7 +290,10 @@ export function createProductsRouter(prisma: ProductPrisma) {
       return
     }
 
-    const product = await prisma.product.findUnique({ where: { id: productId } })
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      include: productInclude,
+    })
 
     if (!product) {
       res.status(404).json({ error: 'product not found' })
@@ -186,7 +311,10 @@ export function createProductsRouter(prisma: ProductPrisma) {
       return
     }
 
-    const product = await prisma.product.create({ data: parsedBody.data })
+    const product = await prisma.product.create({
+      data: toProductCreateData(parsedBody.data),
+      include: productInclude,
+    })
     res.status(201).json(product)
   })
 
@@ -205,7 +333,10 @@ export function createProductsRouter(prisma: ProductPrisma) {
       return
     }
 
-    const existingProduct = await prisma.product.findUnique({ where: { id: productId } })
+    const existingProduct = await prisma.product.findUnique({
+      where: { id: productId },
+      include: productInclude,
+    })
 
     if (!existingProduct) {
       res.status(404).json({ error: 'product not found' })
@@ -214,7 +345,8 @@ export function createProductsRouter(prisma: ProductPrisma) {
 
     const updatedProduct = await prisma.product.update({
       where: { id: productId },
-      data: parsedBody.data,
+      data: toProductUpdateData(parsedBody.data),
+      include: productInclude,
     })
 
     res.json(updatedProduct)
@@ -228,7 +360,10 @@ export function createProductsRouter(prisma: ProductPrisma) {
       return
     }
 
-    const existingProduct = await prisma.product.findUnique({ where: { id: productId } })
+    const existingProduct = await prisma.product.findUnique({
+      where: { id: productId },
+      include: productInclude,
+    })
 
     if (!existingProduct) {
       res.status(404).json({ error: 'product not found' })

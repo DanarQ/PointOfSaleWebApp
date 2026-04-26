@@ -13,25 +13,97 @@ datasource db {
 }
 
 model Product {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   name        String
   price       Float
-  sku         String?  @unique
-  barcode     String?  @unique
-  category    String?
+  sku         String?   @unique
+  barcode     String?   @unique
+  categoryId  Int?
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   description String?
   imageUrl    String?
-  stock       Int      @default(0)
-  unit        String   @default("pcs")
+  stock       Int       @default(0)
+  unit        String    @default("pcs")
   costPrice   Float?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @default(now()) @updatedAt
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+
+  transactionItems TransactionItem[]
+}
+
+model Category {
+  id        Int       @id @default(autoincrement())
+  name      String
+  slug      String    @unique
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
 }
 
 model auth {
-  id       Int    @id @default(autoincrement())
-  email    String @unique
-  password String
-  role     String @default("user")
+  id           Int           @id @default(autoincrement())
+  email        String        @unique
+  password     String
+  role         String        @default("user")
+  transactions Transaction[]
+}
+
+model Transaction {
+  id            Int               @id @default(autoincrement())
+  invoiceNumber String            @unique
+  cashierId     Int?
+  cashier       auth?             @relation(fields: [cashierId], references: [id], onDelete: SetNull)
+  items         TransactionItem[]
+  payments      Payment[]
+  subtotal      Float
+  discount      Float             @default(0)
+  tax           Float             @default(0)
+  total         Float
+  paidAmount    Float
+  changeAmount  Float             @default(0)
+  paymentMethod String            @default("cash")
+  status        String            @default("completed")
+  notes         String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @default(now()) @updatedAt
+
+  @@index([cashierId])
+  @@index([createdAt])
+}
+
+model Payment {
+  id              Int         @id @default(autoincrement())
+  transactionId   Int
+  transaction     Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  amount          Float
+  method          String      @default("cash")
+  provider        String?
+  referenceNumber String?
+  status          String      @default("paid")
+  paidAt          DateTime    @default(now())
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @default(now()) @updatedAt
+
+  @@index([transactionId])
+  @@index([method])
+  @@index([paidAt])
+}
+
+model TransactionItem {
+  id            Int         @id @default(autoincrement())
+  transactionId Int
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  productId     Int
+  product       Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productName   String
+  quantity      Int
+  unitPrice     Float
+  costPrice     Float?
+  discount      Float       @default(0)
+  subtotal      Float
+  createdAt     DateTime    @default(now())
+
+  @@index([transactionId])
+  @@index([productId])
 }

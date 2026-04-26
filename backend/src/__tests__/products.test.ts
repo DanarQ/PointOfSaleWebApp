@@ -9,7 +9,7 @@ type Product = {
   price: number
   sku?: string | null
   barcode?: string | null
-  category?: string | null
+  category?: Category | null
   description?: string | null
   imageUrl?: string | null
   stock?: number
@@ -18,7 +18,17 @@ type Product = {
   isActive?: boolean
 }
 
-type ProductData = Omit<Product, 'id'>
+type Category = {
+  id: number
+  name: string
+  slug: string
+}
+
+type ProductData = Omit<Product, 'id' | 'category'> & {
+  category?:
+    | { connectOrCreate: { where: { slug: string }; create: { name: string; slug: string } } }
+    | { disconnect: true }
+}
 
 type TestCase = {
   name: string
@@ -27,7 +37,32 @@ type TestCase = {
 
 function createPrismaStub(seed: Product[] = []) {
   let products = [...seed]
+  const categories: Category[] = seed.flatMap((product) => product.category ? [product.category] : [])
   let nextId = products.reduce((maxId, product) => Math.max(maxId, product.id), 0) + 1
+  let nextCategoryId =
+    categories.reduce((maxId, category) => Math.max(maxId, category.id), 0) + 1
+
+  function resolveProductData(data: ProductData) {
+    const { category, ...productData } = data
+
+    if (!category) {
+      return productData
+    }
+
+    if ('disconnect' in category) {
+      return { ...productData, category: null }
+    }
+
+    const categorySlug = category.connectOrCreate.where.slug
+    let resolvedCategory = categories.find((item) => item.slug === categorySlug)
+
+    if (!resolvedCategory) {
+      resolvedCategory = { id: nextCategoryId++, ...category.connectOrCreate.create }
+      categories.push(resolvedCategory)
+    }
+
+    return { ...productData, category: resolvedCategory }
+  }
 
   return {
     product: {
@@ -38,7 +73,7 @@ function createPrismaStub(seed: Product[] = []) {
         return products.find((product) => product.id === where.id) ?? null
       },
       async create({ data }: { data: ProductData }) {
-        const product = { id: nextId++, ...data }
+        const product = { id: nextId++, ...resolveProductData(data) }
         products.push(product)
         return product
       },
@@ -55,7 +90,7 @@ function createPrismaStub(seed: Product[] = []) {
           return null
         }
 
-        const updatedProduct = { ...products[productIndex], ...data }
+        const updatedProduct = { ...products[productIndex], ...resolveProductData(data) }
         products[productIndex] = updatedProduct
         return updatedProduct
       },
@@ -227,7 +262,7 @@ const tests: TestCase[] = [
           price: 75000,
           sku: 'BEAN-001',
           barcode: '8991234567890',
-          category: 'Beverage',
+          category: { id: 1, name: 'Beverage', slug: 'beverage' },
           description: 'Arabica blend',
           imageUrl: 'https://example.com/coffee.jpg',
           stock: 12,
@@ -235,6 +270,34 @@ const tests: TestCase[] = [
           costPrice: 50000,
           isActive: false,
         })
+      })
+    },
+  },
+  {
+    name: 'POST /products normalizes matching category names',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp(createPrismaStub())
+      await withServer(app, async (baseUrl) => {
+        const firstResponse = await fetch(`${baseUrl}/products`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ name: 'Mie Goreng', price: 12000, category: ' mie ' }),
+        })
+        const secondResponse = await fetch(`${baseUrl}/products`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ name: 'Mie Rebus', price: 11000, category: 'MIE' }),
+        })
+
+        assert.equal(firstResponse.status, 201)
+        assert.equal(secondResponse.status, 201)
+
+        const firstProduct = await firstResponse.json()
+        const secondProduct = await secondResponse.json()
+
+        assert.deepEqual(firstProduct.category, { id: 1, name: 'Mie', slug: 'mie' })
+        assert.deepEqual(secondProduct.category, { id: 1, name: 'Mie', slug: 'mie' })
       })
     },
   },
