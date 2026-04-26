@@ -13,6 +13,7 @@ import {
 } from "./routes/stockMovements.js";
 import { createTransactionsRouter } from "./routes/transactions.js";
 import { createPaymentsRouter } from "./routes/payments.js";
+import { createAuthMiddleware } from "./middleware/auth.js";
 import type { CategoryPrisma } from "./services/categories.service.js";
 import type { StockMovementPrisma } from "./services/stockMovements.service.js";
 import type { TransactionPrisma } from "./services/transactions.service.js";
@@ -47,6 +48,12 @@ export function createApp(prisma: AppPrisma) {
     res.json({ status: "ok" });
   });
 
+  // Create the auth middleware once if prisma.auth is available.
+  // When undefined (e.g. in tests that skip auth), routers leave write endpoints unprotected.
+  const requireAuth = prisma.auth
+    ? createAuthMiddleware(prisma as ProductPrisma & AuthPrisma)
+    : undefined;
+
   // Each router is mounted only when the required prisma models are present.
   // This allows tests to opt-in to only the routes they need.
 
@@ -55,7 +62,10 @@ export function createApp(prisma: AppPrisma) {
   }
 
   if (prisma.category) {
-    app.use("/categories", createCategoriesRouter(prisma as ProductPrisma & CategoryPrisma));
+    app.use(
+      "/categories",
+      createCategoriesRouter(prisma as ProductPrisma & CategoryPrisma, requireAuth),
+    );
   }
 
   // Stock movements need $transaction because creating one also updates product.stock atomically.
@@ -66,7 +76,7 @@ export function createApp(prisma: AppPrisma) {
     );
     app.use(
       "/stock-movements",
-      createStockMovementsRouter(prisma as ProductPrisma & StockMovementPrisma),
+      createStockMovementsRouter(prisma as ProductPrisma & StockMovementPrisma, requireAuth),
     );
   }
 
@@ -80,7 +90,10 @@ export function createApp(prisma: AppPrisma) {
   ) {
     app.use(
       "/transactions",
-      createTransactionsRouter(prisma as ProductPrisma & StockMovementPrisma & TransactionPrisma),
+      createTransactionsRouter(
+        prisma as ProductPrisma & StockMovementPrisma & TransactionPrisma,
+        requireAuth,
+      ),
     );
   }
 
@@ -89,7 +102,7 @@ export function createApp(prisma: AppPrisma) {
   }
 
   // Products router is always present — other routers depend on the product model.
-  app.use("/products", createProductsRouter(prisma));
+  app.use("/products", createProductsRouter(prisma, requireAuth));
 
   // Must be registered last so it catches errors thrown by all routes above.
   app.use(jsonErrorHandler);

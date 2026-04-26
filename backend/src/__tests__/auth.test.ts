@@ -253,6 +253,73 @@ const tests: TestCase[] = [
       })
     },
   },
+  {
+    name: 'POST /products without token rejects when auth is enabled',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp({
+        ...emptyProductPrisma,
+        ...createAuthPrismaStub([
+          { id: 1, email: 'cashier@example.com', password: 'hash', role: 'user' },
+        ]),
+      })
+
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/products`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ name: 'Coffee', price: 15000 }),
+        })
+
+        assert.equal(response.status, 401)
+        assert.deepEqual(await response.json(), { error: 'authorization token is required' })
+      })
+    },
+  },
+  {
+    name: 'POST /products with invalid token rejects',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp({
+        ...emptyProductPrisma,
+        ...createAuthPrismaStub([
+          { id: 1, email: 'cashier@example.com', password: 'hash', role: 'user' },
+        ]),
+      })
+
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/products`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: 'Bearer not.a.real.token',
+          },
+          body: JSON.stringify({ name: 'Coffee', price: 15000 }),
+        })
+
+        assert.equal(response.status, 401)
+        assert.deepEqual(await response.json(), { error: 'invalid authorization token' })
+      })
+    },
+  },
+  {
+    name: 'GET /products without token works (read endpoints stay open)',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp({
+        ...emptyProductPrisma,
+        ...createAuthPrismaStub([
+          { id: 1, email: 'cashier@example.com', password: 'hash', role: 'user' },
+        ]),
+      })
+
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/products`)
+
+        assert.equal(response.status, 200)
+      })
+    },
+  },
 ]
 
 for (const testCase of tests) {

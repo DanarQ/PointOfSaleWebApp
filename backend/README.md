@@ -152,10 +152,25 @@ Sertakan di header setiap request yang memerlukan autentikasi:
 Authorization: Bearer <token>
 ```
 
+### Endpoint yang membutuhkan token
+
+Semua endpoint **write** (POST, PUT, DELETE) memerlukan token. Endpoint **read** (GET) terbuka.
+
+| Method & Path | Perlu Token |
+|---|---|
+| `POST /products`, `PUT /products/:id`, `DELETE /products/:id` | ✅ |
+| `POST /categories`, `PUT /categories/:id`, `DELETE /categories/:id` | ✅ |
+| `POST /stock-movements` | ✅ |
+| `POST /transactions`, `POST /transactions/:id/void` | ✅ |
+| `GET /auth/me` | ✅ |
+| Semua endpoint GET lainnya | ❌ |
+
+Jika token tidak ada atau invalid, response: `401 { "error": "authorization token is required" }` atau `401 { "error": "invalid authorization token" }`.
+
 ### Catatan
 
-- Token berlaku selama **8 jam**
-- Saat ini hanya endpoint `GET /auth/me` yang mewajibkan token. Endpoint lain belum memerlukan autentikasi (cocok untuk pengembangan awal).
+- Token berlaku selama **8 jam**, belum ada mekanisme refresh — user harus login ulang setelah expired
+- Field `role` ada di JWT payload (default `"user"`) tapi belum dipakai untuk membatasi akses per role
 
 ---
 
@@ -332,7 +347,23 @@ Setiap produk mengembalikan objek kategori lengkap di field `category` (bukan ha
 
 #### `GET /products`
 
-Ambil semua produk, diurutkan dari ID terkecil.
+Ambil produk, diurutkan dari ID terkecil. Mendukung filter via query parameter.
+
+**Query Parameters** (semua opsional)
+
+| Param | Tipe | Keterangan |
+|---|---|---|
+| `isActive` | `"true"` \| `"false"` | Filter berdasarkan status aktif. Tanpa param berarti semua produk dikembalikan. |
+| `search` | string | Case-insensitive substring match di **name**, **sku**, dan **barcode**. Cocok untuk search box dan barcode scanner di POS. |
+| `categoryId` | number | Filter produk berdasarkan ID kategori. |
+
+**Contoh URL**
+```
+GET /products?isActive=true                  ← hanya produk aktif (untuk halaman kasir)
+GET /products?search=kopi                    ← cari produk yang mengandung "kopi"
+GET /products?search=8991234567890           ← cari by barcode (scanner)
+GET /products?categoryId=1&isActive=true     ← kombinasi filter
+```
 
 **Response `200`**
 ```json
@@ -353,6 +384,11 @@ Ambil semua produk, diurutkan dari ID terkecil.
   }
 ]
 ```
+
+**Error**
+| Status | Error |
+|---|---|
+| `400` | `isActive must be true or false` / `categoryId must be a positive integer` |
 
 ---
 

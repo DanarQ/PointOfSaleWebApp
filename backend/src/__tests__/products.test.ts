@@ -35,6 +35,47 @@ type TestCase = {
   run: () => Promise<void>
 }
 
+type ProductWhereInput = {
+  isActive?: boolean
+  categoryId?: number
+  OR?: Array<
+    | { name: { contains: string; mode: 'insensitive' } }
+    | { sku: { contains: string; mode: 'insensitive' } }
+    | { barcode: { contains: string; mode: 'insensitive' } }
+  >
+}
+
+function matchesWhere(product: Product & { categoryId?: number | null }, where: ProductWhereInput | undefined): boolean {
+  if (!where) return true
+
+  if (where.isActive !== undefined && product.isActive !== where.isActive) {
+    return false
+  }
+
+  if (where.categoryId !== undefined) {
+    const categoryId = product.category?.id ?? product.categoryId ?? null
+    if (categoryId !== where.categoryId) return false
+  }
+
+  if (where.OR) {
+    const matched = where.OR.some((clause) => {
+      if ('name' in clause) {
+        return product.name.toLowerCase().includes(clause.name.contains.toLowerCase())
+      }
+      if ('sku' in clause) {
+        return Boolean(product.sku?.toLowerCase().includes(clause.sku.contains.toLowerCase()))
+      }
+      if ('barcode' in clause) {
+        return Boolean(product.barcode?.toLowerCase().includes(clause.barcode.contains.toLowerCase()))
+      }
+      return false
+    })
+    if (!matched) return false
+  }
+
+  return true
+}
+
 function createPrismaStub(seed: Product[] = []) {
   let products = [...seed]
   const categories: Category[] = seed.flatMap((product) => product.category ? [product.category] : [])
@@ -66,8 +107,10 @@ function createPrismaStub(seed: Product[] = []) {
 
   return {
     product: {
-      async findMany() {
-        return [...products].sort((left, right) => left.id - right.id)
+      async findMany({ where }: { where?: ProductWhereInput } = {}) {
+        return [...products]
+          .filter((product) => matchesWhere(product, where))
+          .sort((left, right) => left.id - right.id)
       },
       async findUnique({ where }: { where: { id: number } }) {
         return products.find((product) => product.id === where.id) ?? null
@@ -422,6 +465,142 @@ const tests: TestCase[] = [
 
         assert.equal(response.status, 200)
         assert.deepEqual(await response.json(), { message: 'product deleted' })
+      })
+    },
+  },
+  {
+    name: 'GET /products?isActive=true returns only active products',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp(
+        createPrismaStub([
+          { id: 1, name: 'Coffee', price: 15000, isActive: true },
+          { id: 2, name: 'Discontinued Tea', price: 8000, isActive: false },
+        ]),
+      )
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/products?isActive=true`)
+
+        assert.equal(response.status, 200)
+        const body = await response.json()
+        assert.equal(body.length, 1)
+        assert.equal(body[0].id, 1)
+      })
+    },
+  },
+  {
+    name: 'GET /products?isActive=false returns only inactive products',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp(
+        createPrismaStub([
+          { id: 1, name: 'Coffee', price: 15000, isActive: true },
+          { id: 2, name: 'Discontinued Tea', price: 8000, isActive: false },
+        ]),
+      )
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/products?isActive=false`)
+
+        assert.equal(response.status, 200)
+        const body = await response.json()
+        assert.equal(body.length, 1)
+        assert.equal(body[0].id, 2)
+      })
+    },
+  },
+  {
+    name: 'GET /products?isActive=invalid returns 400',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp(createPrismaStub())
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/products?isActive=maybe`)
+
+        assert.equal(response.status, 400)
+        assert.deepEqual(await response.json(), { error: 'isActive must be true or false' })
+      })
+    },
+  },
+  {
+    name: 'GET /products?search=foo matches by name',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp(
+        createPrismaStub([
+          { id: 1, name: 'Coffee Latte', price: 15000 },
+          { id: 2, name: 'Tea', price: 8000 },
+          { id: 3, name: 'Cold Brew Coffee', price: 18000 },
+        ]),
+      )
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/products?search=coffee`)
+
+        assert.equal(response.status, 200)
+        const body = await response.json()
+        assert.deepEqual(body.map((p: Product) => p.id), [1, 3])
+      })
+    },
+  },
+  {
+    name: 'GET /products?search=BARCODE matches by barcode for scanner integration',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp(
+        createPrismaStub([
+          { id: 1, name: 'Coffee', price: 15000, barcode: '8991234567890' },
+          { id: 2, name: 'Tea', price: 8000, barcode: '8990000000001' },
+        ]),
+      )
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/products?search=8991234567890`)
+
+        assert.equal(response.status, 200)
+        const body = await response.json()
+        assert.equal(body.length, 1)
+        assert.equal(body[0].id, 1)
+      })
+    },
+  },
+  {
+    name: 'GET /products?categoryId=1 filters by category',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp(
+        createPrismaStub([
+          {
+            id: 1,
+            name: 'Coffee',
+            price: 15000,
+            category: { id: 1, name: 'Beverage', slug: 'beverage' },
+          },
+          {
+            id: 2,
+            name: 'Chips',
+            price: 5000,
+            category: { id: 2, name: 'Snack', slug: 'snack' },
+          },
+        ]),
+      )
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/products?categoryId=1`)
+
+        assert.equal(response.status, 200)
+        const body = await response.json()
+        assert.equal(body.length, 1)
+        assert.equal(body[0].id, 1)
+      })
+    },
+  },
+  {
+    name: 'GET /products?categoryId=abc returns 400',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp(createPrismaStub())
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/products?categoryId=abc`)
+
+        assert.equal(response.status, 400)
+        assert.deepEqual(await response.json(), { error: 'categoryId must be a positive integer' })
       })
     },
   },

@@ -5,6 +5,7 @@ import type { Request, Response } from 'express'
 import {
   createProductsService,
   parseProductId,
+  parseProductListFilters,
   type ProductPrisma,
 } from '../services/products.service.js'
 
@@ -12,8 +13,16 @@ export function createProductsController(prisma: ProductPrisma) {
   const productsService = createProductsService(prisma)
 
   return {
-    async listProducts(_req: Request, res: Response) {
-      const products = await productsService.listProducts()
+    // GET /products — supports ?isActive=true|false&search=foo&categoryId=1
+    async listProducts(req: Request, res: Response) {
+      const filters = parseProductListFilters(req.query as Record<string, unknown>)
+
+      if ('error' in filters) {
+        res.status(400).json({ error: filters.error })
+        return
+      }
+
+      const products = await productsService.listProducts(filters.value)
       res.json(products)
     },
 

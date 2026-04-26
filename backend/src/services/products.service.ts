@@ -48,7 +48,21 @@ type ProductData = {
 // All queries include category so the response always has category details.
 type ProductInclude = { category: true }
 
+// Where clause shape supported by listProducts.
+// The fields are optional and combined with AND in Prisma when present.
+type ProductWhereInput = {
+  isActive?: boolean
+  categoryId?: number
+  // OR is used for the search term — matches any of name/sku/barcode (case-insensitive).
+  OR?: Array<
+    | { name: { contains: string; mode: 'insensitive' } }
+    | { sku: { contains: string; mode: 'insensitive' } }
+    | { barcode: { contains: string; mode: 'insensitive' } }
+  >
+}
+
 type ProductFindManyArgs = {
+  where?: ProductWhereInput
   orderBy: { id: 'asc' }
   include: ProductInclude
 }
@@ -104,6 +118,85 @@ export function parseProductId(rawId: unknown) {
   }
 
   return id
+}
+
+// Filters accepted by listProducts. All optional — caller passes an empty object for "no filters".
+export type ProductListFilters = {
+  isActive?: boolean    // true → active only, false → inactive only, undefined → all
+  categoryId?: number   // exact match by category ID
+  search?: string       // case-insensitive substring match across name, sku, and barcode
+}
+
+// Parses query params from the request into a ProductListFilters object.
+// Accepts strings (since req.query is always strings) and converts to typed values.
+// Returns { error } for malformed values; otherwise { value } with the parsed filters.
+export function parseProductListFilters(query: Record<string, unknown>): { value: ProductListFilters } | { error: string } {
+  const filters: ProductListFilters = {}
+
+  if (query.isActive !== undefined) {
+    if (query.isActive === 'true') {
+      filters.isActive = true
+    } else if (query.isActive === 'false') {
+      filters.isActive = false
+    } else {
+      return { error: 'isActive must be true or false' }
+    }
+  }
+
+  if (query.categoryId !== undefined) {
+    if (typeof query.categoryId !== 'string') {
+      return { error: 'categoryId must be a positive integer' }
+    }
+
+    const categoryId = Number(query.categoryId)
+
+    if (!Number.isInteger(categoryId) || categoryId <= 0) {
+      return { error: 'categoryId must be a positive integer' }
+    }
+
+    filters.categoryId = categoryId
+  }
+
+  if (query.search !== undefined) {
+    if (typeof query.search !== 'string') {
+      return { error: 'search must be a string' }
+    }
+
+    const trimmed = query.search.trim()
+
+    // Empty search string means "no search filter applied".
+    if (trimmed) {
+      filters.search = trimmed
+    }
+  }
+
+  return { value: filters }
+}
+
+// Builds the Prisma where clause from the parsed filters.
+// Only includes fields that were actually provided so unfiltered queries stay fast.
+function buildProductWhere(filters: ProductListFilters): ProductWhereInput | undefined {
+  const where: ProductWhereInput = {}
+
+  if (filters.isActive !== undefined) {
+    where.isActive = filters.isActive
+  }
+
+  if (filters.categoryId !== undefined) {
+    where.categoryId = filters.categoryId
+  }
+
+  if (filters.search) {
+    // Match the search term against name, sku, or barcode — useful for both
+    // typed search and barcode scanner input from the POS frontend.
+    where.OR = [
+      { name: { contains: filters.search, mode: 'insensitive' } },
+      { sku: { contains: filters.search, mode: 'insensitive' } },
+      { barcode: { contains: filters.search, mode: 'insensitive' } },
+    ]
+  }
+
+  return Object.keys(where).length === 0 ? undefined : where
 }
 
 // Handles optional string fields: undefined means "don't change", null means "clear the field".
@@ -310,8 +403,17 @@ function toProductUpdateData(data: ProductData): ProductUpdateData {
 
 export function createProductsService(prisma: ProductPrisma) {
   return {
-    async listProducts() {
-      return prisma.product.findMany({ orderBy: { id: 'asc' }, include: productInclude })
+    // Returns all products by default. When filters are passed, the result is narrowed:
+    //   - isActive: only active or only inactive products
+    //   - categoryId: products in that category only
+    //   - search: products whose name, sku, or barcode contains the term (case-insensitive)
+    async listProducts(filters: ProductListFilters = {}) {
+      const where = buildProductWhere(filters)
+      return prisma.product.findMany({
+        ...(where ? { where } : {}),
+        orderBy: { id: 'asc' },
+        include: productInclude,
+      })
     },
 
     async getProduct(id: number): Promise<ProductServiceResult<ProductRecord>> {
