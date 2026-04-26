@@ -87,7 +87,11 @@ type TransactionPrismaStub = {
     findMany: (args: { orderBy: { id: 'desc' }; include: TransactionInclude }) => Promise<Transaction[]>
     findUnique: (args: { where: { id: number }; include: TransactionInclude }) => Promise<Transaction | null>
     create: (args: { data: TransactionCreateData }) => Promise<Transaction>
-    update: (args: { where: { id: number }; data: { invoiceNumber: string } }) => Promise<Transaction | null>
+    // Widened to support invoiceNumber (create flow), status and notes (void flow).
+    update: (args: {
+      where: { id: number }
+      data: Partial<Pick<Transaction, 'invoiceNumber' | 'status' | 'notes'>>
+    }) => Promise<Transaction | null>
   }
   transactionItem: {
     create: (args: { data: Omit<TransactionItem, 'id'> }) => Promise<TransactionItem>
@@ -499,6 +503,119 @@ const tests: TestCase[] = [
         assert.equal(response.status, 200)
         const body = await response.json()
         assert.deepEqual(body.map((transaction: Transaction) => transaction.id), [2, 1])
+      })
+    },
+  },
+  {
+    name: 'POST /transactions/:id/void marks transaction voided and restores stock',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp(
+        createPrismaStub({
+          products: [{ id: 1, name: 'Coffee', price: 15000, stock: 8 }],
+          transactions: [
+            {
+              id: 1,
+              invoiceNumber: 'INV-000001',
+              cashierId: 7,
+              subtotal: 30000,
+              discount: 0,
+              tax: 0,
+              total: 30000,
+              paidAmount: 30000,
+              changeAmount: 0,
+              paymentMethod: 'cash',
+              status: 'completed',
+              items: [
+                {
+                  id: 1,
+                  transactionId: 1,
+                  productId: 1,
+                  productName: 'Coffee',
+                  quantity: 2,
+                  unitPrice: 15000,
+                  costPrice: 9000,
+                  discount: 0,
+                  subtotal: 30000,
+                },
+              ],
+            },
+          ],
+        }),
+      )
+
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/transactions/1/void`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ notes: 'wrong item' }),
+        })
+
+        assert.equal(response.status, 200)
+        const body = await response.json()
+        assert.equal(body.status, 'voided')
+        assert.equal(body.notes, 'wrong item')
+
+        const stockResponse = await fetch(`${baseUrl}/stock-movements`)
+        assert.deepEqual(await stockResponse.json(), [
+          {
+            id: 1,
+            productId: 1,
+            userId: 7,
+            type: 'void',
+            quantity: 2,
+            stockBefore: 8,
+            stockAfter: 10,
+            referenceType: 'transaction',
+            referenceId: 1,
+            notes: 'Void INV-000001',
+          },
+        ])
+      })
+    },
+  },
+  {
+    name: 'POST /transactions/:id/void rejects already voided transactions',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp(
+        createPrismaStub({
+          transactions: [
+            {
+              id: 1,
+              invoiceNumber: 'INV-000001',
+              subtotal: 10000,
+              discount: 0,
+              tax: 0,
+              total: 10000,
+              paidAmount: 10000,
+              changeAmount: 0,
+              paymentMethod: 'cash',
+              status: 'voided',
+            },
+          ],
+        }),
+      )
+
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/transactions/1/void`, { method: 'POST' })
+
+        assert.equal(response.status, 400)
+        assert.deepEqual(await response.json(), { error: 'transaction cannot be voided' })
+      })
+    },
+  },
+  {
+    name: 'POST /transactions/:id/void rejects missing transactions',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp(createPrismaStub())
+
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/transactions/999/void`, { method: 'POST' })
+
+        assert.equal(response.status, 404)
+        assert.deepEqual(await response.json(), { error: 'transaction not found' })
       })
     },
   },

@@ -82,7 +82,12 @@ type TransactionCreateData = Omit<TransactionRecord, 'id' | 'items' | 'payments'
 type TransactionPrismaClient = {
   product: {
     findUnique: (args: { where: { id: number } }) => Promise<ProductRecord | null>
-    // updateMany with conditional WHERE to decrement stock atomically.
+    // update with increment is used by voidTransaction to restore stock for each voided item.
+    update: (args: {
+      where: { id: number }
+      data: { stock: { increment: number } }
+    }) => Promise<ProductRecord | null>
+    // updateMany with conditional WHERE to decrement stock atomically (used by createTransaction).
     updateMany: (args: {
       where: { id: number; stock: { gte: number } }
       data: { stock: { decrement: number } }
@@ -92,9 +97,10 @@ type TransactionPrismaClient = {
     findMany: (args: { orderBy: { id: 'desc' }; include: TransactionInclude }) => Promise<TransactionRecord[]>
     findUnique: (args: { where: { id: number }; include: TransactionInclude }) => Promise<TransactionRecord | null>
     create: (args: { data: TransactionCreateData }) => Promise<TransactionRecord>
+    // Widened from { invoiceNumber: string } to support updating status and notes (used by voidTransaction).
     update: (args: {
       where: { id: number }
-      data: { invoiceNumber: string }
+      data: Partial<Pick<TransactionRecord, 'invoiceNumber' | 'status' | 'notes'>>
     }) => Promise<TransactionRecord | null>
   }
   transactionItem: {
@@ -324,6 +330,26 @@ function parseTransactionBody(body: unknown): TransactionServiceResult<ParsedTra
   }
 }
 
+// Parses the void request body. The body is entirely optional — notes is the only accepted field.
+// Allows POST /transactions/:id/void with no body at all (body === undefined) as a valid request.
+function parseVoidBody(body: unknown): TransactionServiceResult<{ notes: string | null }> {
+  if (body === undefined) {
+    return { ok: true, data: { notes: null } }
+  }
+
+  if (!body || typeof body !== 'object') {
+    return { ok: false, status: 400, error: 'invalid request body' }
+  }
+
+  const notes = parseOptionalString(body as Record<string, unknown>, 'notes')
+
+  if ('error' in notes) {
+    return { ok: false, status: 400, error: notes.error }
+  }
+
+  return { ok: true, data: { notes: notes.value } }
+}
+
 // Formats the invoice number as INV-000001 using the transaction's DB-assigned ID.
 // Zero-padded to 6 digits to sort correctly as a string.
 function createInvoiceNumber(nextId: number) {
@@ -507,6 +533,86 @@ export function createTransactionsService(prisma: TransactionPrisma) {
 
         // Override invoiceNumber in the response — the DB record was already updated above.
         return { ok: true, data: { ...createdTransaction, invoiceNumber } }
+      })
+    },
+
+    // POST /transactions/:id/void — reverses a completed transaction.
+    // Only 'completed' transactions can be voided; 'voided' and any other status are rejected.
+    // The void flow inside the DB transaction:
+    //   1. Fetch the transaction with its items
+    //   2. For each item: read stock, increment it back, create a 'void' StockMovement
+    //   3. Update the transaction status to 'voided' and optionally set notes
+    //   4. Re-fetch to return the full record with items and payments
+    async voidTransaction(id: number, body: unknown): Promise<TransactionServiceResult<TransactionRecord>> {
+      const parsedBody = parseVoidBody(body)
+
+      if (!parsedBody.ok) {
+        return parsedBody
+      }
+
+      return prisma.$transaction(async (tx) => {
+        const transaction = await tx.transaction.findUnique({
+          where: { id },
+          include: transactionInclude,
+        })
+
+        if (!transaction) {
+          return { ok: false, status: 404, error: 'transaction not found' }
+        }
+
+        // Idempotency guard — prevent double-void and voiding non-completed transactions.
+        if (transaction.status !== 'completed') {
+          return { ok: false, status: 400, error: 'transaction cannot be voided' }
+        }
+
+        // Restore stock for every line item and record the reversal as a 'void' movement.
+        for (const item of transaction.items ?? []) {
+          const productBeforeRestore = await tx.product.findUnique({
+            where: { id: item.productId },
+          })
+          const stockBefore = productBeforeRestore?.stock ?? 0
+
+          const restoredProduct = await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { increment: item.quantity } },
+          })
+          const stockAfter = restoredProduct?.stock ?? stockBefore + item.quantity
+
+          await tx.stockMovement.create({
+            data: {
+              productId: item.productId,
+              userId: transaction.cashierId ?? null,
+              type: 'void',
+              quantity: item.quantity,
+              stockBefore,
+              stockAfter,
+              referenceType: 'transaction',
+              referenceId: transaction.id,
+              notes: `Void ${transaction.invoiceNumber}`,
+            },
+          })
+        }
+
+        const updatedTransaction = await tx.transaction.update({
+          where: { id },
+          data: {
+            status: 'voided',
+            // If notes were provided in the request, use them; otherwise keep the original notes.
+            notes: parsedBody.data.notes ?? transaction.notes ?? null,
+          },
+        })
+
+        if (!updatedTransaction) {
+          return { ok: false, status: 404, error: 'transaction not found' }
+        }
+
+        // Re-fetch to include the full items and payments relations in the response.
+        const completedTransaction = await tx.transaction.findUnique({
+          where: { id },
+          include: transactionInclude,
+        })
+
+        return { ok: true, data: completedTransaction ?? updatedTransaction }
       })
     },
   }

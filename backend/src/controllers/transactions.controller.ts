@@ -45,5 +45,25 @@ export function createTransactionsController(prisma: TransactionPrisma) {
 
       res.status(201).json(result.data)
     },
+
+    // POST /transactions/:id/void — marks a transaction as voided and restores product stock.
+    // Optional body: { notes: string } to record a reason for the void.
+    async voidTransaction(req: Request, res: Response) {
+      const transactionId = parseTransactionId(req.params.id)
+
+      if (!transactionId) {
+        res.status(400).json({ error: 'invalid transaction id' })
+        return
+      }
+
+      const result = await transactionsService.voidTransaction(transactionId, req.body)
+
+      if (!result.ok) {
+        res.status(result.status).json({ error: result.error })
+        return
+      }
+
+      res.json(result.data)
+    },
   }
 }
