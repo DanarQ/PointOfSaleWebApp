@@ -1,5 +1,6 @@
-import { createHmac, pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto'
+import { pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto'
 import { Router } from 'express'
+import jwt from 'jsonwebtoken'
 
 type AuthUserRecord = {
   id: number
@@ -35,14 +36,6 @@ const passwordDigest = 'sha256'
 
 function getTokenSecret() {
   return process.env.AUTH_TOKEN_SECRET ?? 'point-of-sale-dev-secret'
-}
-
-function toBase64Url(value: string | Buffer) {
-  return Buffer.from(value).toString('base64url')
-}
-
-function sign(value: string) {
-  return createHmac('sha256', getTokenSecret()).update(value).digest('base64url')
 }
 
 function sanitizeUser(user: AuthUserRecord) {
@@ -107,30 +100,15 @@ function verifyPassword(password: string, storedPassword: string) {
 }
 
 export function createAuthToken(payload: AuthTokenPayload) {
-  const header = toBase64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
-  const body = toBase64Url(JSON.stringify(payload))
-  const unsignedToken = `${header}.${body}`
-
-  return `${unsignedToken}.${sign(unsignedToken)}`
+  return jwt.sign(payload, getTokenSecret(), { expiresIn: '8h' })
 }
 
 function verifyAuthToken(token: string): AuthTokenPayload | null {
-  const [header, body, signature] = token.split('.')
-
-  if (!header || !body || !signature) {
-    return null
-  }
-
-  const unsignedToken = `${header}.${body}`
-
-  if (signature !== sign(unsignedToken)) {
-    return null
-  }
-
   try {
-    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as AuthTokenPayload
+    const payload = jwt.verify(token, getTokenSecret())
 
     if (
+      typeof payload !== 'object' ||
       !Number.isInteger(payload.id) ||
       typeof payload.email !== 'string' ||
       typeof payload.role !== 'string'
@@ -138,7 +116,11 @@ function verifyAuthToken(token: string): AuthTokenPayload | null {
       return null
     }
 
-    return payload
+    return {
+      id: payload.id,
+      email: payload.email,
+      role: payload.role,
+    }
   } catch {
     return null
   }

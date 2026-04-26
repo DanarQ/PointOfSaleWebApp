@@ -181,6 +181,20 @@ const tests: TestCase[] = [
     },
   },
   {
+    name: 'createAuthToken includes an expiration claim',
+    async run() {
+      const { createAuthToken } = await import('../routes/auth.js')
+      const token = createAuthToken({ id: 1, email: 'cashier@example.com', role: 'user' })
+      const [, body] = token.split('.')
+
+      assert.equal(typeof body, 'string')
+
+      const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'))
+
+      assert.equal(typeof payload.exp, 'number')
+    },
+  },
+  {
     name: 'POST /auth/login rejects invalid credentials',
     async run() {
       const { createApp } = await import('../app.js')

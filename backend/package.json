@@ -5,7 +5,7 @@
   "main": "src/index.ts",
   "scripts": {
     "build": "tsc",
-    "dev": "tsx watch src/index.ts",
+    "dev": "nodemon",
     "start": "npm run build && node dist/src/index.js",
     "test": "npm run build && node dist/src/__tests__/products.test.js && node dist/src/__tests__/auth.test.js"
   },
@@ -19,15 +19,31 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
     "pg": "^8.20.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.6.0",
     "@types/pg": "^8.20.0",
+    "nodemon": "^3.1.14",
     "prisma": "^7.8.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3"
+  },
+  "nodemonConfig": {
+    "watch": [
+      "src",
+      "prisma",
+      ".env"
+    ],
+    "ext": "ts,json,env",
+    "ignore": [
+      "dist",
+      "node_modules"
+    ],
+    "exec": "tsx src/index.ts"
   }
 }
