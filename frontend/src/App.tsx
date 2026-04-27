@@ -1,9 +1,9 @@
 import "./App.css";
-
+import Login from "./component/Login";
 function App() {
   return (
     <>
-      <h1>POS DEMO</h1>
+      <Login />
     </>
   );
 }

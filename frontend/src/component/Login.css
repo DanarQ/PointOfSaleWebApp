@@ -1,0 +1,340 @@
+.login-page {
+  --login-blue: #1666e8;
+  --login-blue-dark: #0b3fba;
+  --login-navy: #101f5d;
+  --login-ink: #15214a;
+  --login-line: #dfe5ef;
+  --login-shadow: 0 26px 70px rgba(21, 33, 74, 0.22);
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  padding: 32px 18px;
+  background: #eef3fb;
+  color: var(--login-ink);
+  font-family: "Segoe UI Variable", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.login-page::before {
+  content: none;
+}
+
+.login-background {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #eef3fb;
+}
+
+.login-background img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(3px);
+  transform: scale(1.02);
+}
+
+.login-background__wash {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.58) 48%, rgba(255, 255, 255, 0.76)),
+    linear-gradient(180deg, rgba(239, 245, 255, 0.34), rgba(255, 255, 255, 0.2));
+}
+
+.login-background__blue-panel {
+  position: absolute;
+  inset: auto -10% -18% -10%;
+  height: 36vh;
+  background: linear-gradient(135deg, #2f85ff 0%, #065fe6 58%, #004dca 100%);
+  clip-path: polygon(0 14%, 50% 42%, 100% 9%, 100% 100%, 0 100%);
+  opacity: 0.95;
+}
+
+.login-card.ant-card {
+  width: min(100%, 520px);
+  position: relative;
+  z-index: 2;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--login-shadow);
+  backdrop-filter: blur(16px);
+  animation: login-card-in 420ms ease both;
+}
+
+.login-card .ant-card-body {
+  padding: 0;
+}
+
+.login-hero {
+  padding: 42px 44px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.login-mark {
+  width: 142px;
+  height: 126px;
+  margin-bottom: 14px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.85), transparent 28%),
+    linear-gradient(145deg, #eef5ff, #dceaff);
+  color: var(--login-blue);
+  font-size: 74px;
+  box-shadow: inset 0 -16px 30px rgba(22, 102, 232, 0.08);
+}
+
+.login-copy .ant-typography {
+  margin: 0;
+}
+
+.login-copy h1.ant-typography {
+  color: var(--login-navy);
+  font-size: 38px;
+  line-height: 1.08;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.login-copy h1.ant-typography span {
+  color: var(--login-blue);
+}
+
+.login-subtitle {
+  margin-top: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: #737e94;
+}
+
+.login-subtitle__line {
+  flex: 0 1 72px;
+  width: 72px;
+  height: 1px;
+  background: #cdd5e4;
+}
+
+.login-subtitle__text.ant-typography {
+  color: #737e94;
+  font-size: 18px;
+  letter-spacing: 4px;
+  white-space: nowrap;
+}
+
+.login-description.ant-typography {
+  display: block;
+  margin: 14px 0 0;
+  color: #68738c;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.login-form {
+  padding: 20px 44px 32px;
+}
+
+.login-form h2.ant-typography {
+  margin: 0 0 18px;
+  color: var(--login-navy);
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 800;
+}
+
+.login-form .ant-form-item {
+  margin-bottom: 18px;
+}
+
+.login-form .ant-form-item-label {
+  display: none;
+}
+
+.login-form .ant-input-affix-wrapper {
+  width: 100%;
+  height: 58px;
+  padding: 0 22px;
+  border: 1px solid var(--login-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.login-form .ant-input-affix-wrapper:hover,
+.login-form .ant-input-affix-wrapper-focused {
+  border-color: var(--login-blue);
+  box-shadow: 0 0 0 4px rgba(22, 102, 232, 0.12);
+}
+
+.login-form .ant-input-prefix,
+.login-form .ant-input-password-icon {
+  color: #7c879d;
+}
+
+.login-form .ant-input-prefix {
+  margin-inline-end: 12px;
+}
+
+.login-form .ant-input-prefix svg,
+.login-form .ant-input-password-icon svg {
+  width: 23px;
+  height: 23px;
+}
+
+.login-form .ant-input {
+  color: var(--login-ink);
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.login-form .ant-input::placeholder {
+  color: #94a0b4;
+  font-weight: 500;
+}
+
+.login-button.ant-btn {
+  width: 100%;
+  height: 64px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #1d7cff 0%, var(--login-blue) 55%, var(--login-blue-dark) 100%);
+  color: #ffffff;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0;
+  box-shadow: 0 14px 30px rgba(22, 102, 232, 0.32);
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    filter 160ms ease;
+}
+
+.login-button.ant-btn:hover,
+.login-button.ant-btn:focus-visible {
+  color: #ffffff;
+  background: linear-gradient(135deg, #1d7cff 0%, var(--login-blue) 55%, var(--login-blue-dark) 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 18px 36px rgba(22, 102, 232, 0.4);
+  filter: saturate(1.08);
+}
+
+.login-button.ant-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 10px 22px rgba(22, 102, 232, 0.28);
+}
+
+.login-button .anticon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.login-footer {
+  border-top: 1px solid #edf1f7;
+  padding: 22px 24px 28px;
+  color: #7b879d;
+  font-size: 15px;
+}
+
+.login-footer .anticon {
+  color: var(--login-blue);
+  font-size: 20px;
+}
+
+.login-footer .ant-typography {
+  color: #7b879d;
+  font-size: 15px;
+}
+
+@keyframes login-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 680px) {
+  .login-page {
+    padding: 20px 14px;
+  }
+
+  .login-card.ant-card {
+    width: min(100%, 420px);
+  }
+
+  .login-hero {
+    padding: 32px 24px 14px;
+  }
+
+  .login-mark {
+    width: 116px;
+    height: 104px;
+    font-size: 62px;
+  }
+
+  .login-copy h1.ant-typography {
+    font-size: 30px;
+  }
+
+  .login-subtitle {
+    gap: 12px;
+  }
+
+  .login-subtitle__line {
+    width: 46px;
+    flex-basis: 46px;
+  }
+
+  .login-subtitle__text.ant-typography {
+    font-size: 14px;
+    letter-spacing: 3px;
+  }
+
+  .login-description.ant-typography {
+    font-size: 14px;
+  }
+
+  .login-form {
+    padding: 18px 22px 28px;
+  }
+
+  .login-form .ant-input-affix-wrapper,
+  .login-button.ant-btn {
+    height: 56px;
+  }
+
+  .login-form .ant-input {
+    font-size: 16px;
+  }
+
+  .login-footer {
+    padding: 20px 18px 24px;
+  }
+
+  .login-footer .ant-typography {
+    font-size: 14px;
+  }
+}
