@@ -14,12 +14,51 @@ import {
   Input,
   Typography,
 } from "antd";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Images from "../assets/Gambar";
+import { login, saveAuthSession } from "../services/auth";
 import "./Login.css";
 
 const { Text, Title } = Typography;
 
+type LoginFormValues = {
+  email: string;
+  password: string;
+};
+
 function Login() {
+  const navigate = useNavigate();
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handleLogin(values: LoginFormValues) {
+    setErrorMessage("");
+    setIsSubmitting(true);
+
+    try {
+      const session = await login({
+        email: values.email,
+        password: values.password,
+      });
+
+      saveAuthSession(session);
+
+      if (session.user.role === "user") {
+        navigate("/kasir", { replace: true });
+        return;
+      }
+
+      setErrorMessage(`Role "${session.user.role}" belum punya halaman tujuan.`);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Login gagal, coba lagi.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return (
     <main className="login-page">
       <div className="login-background" aria-hidden="true">
@@ -64,19 +103,25 @@ function Login() {
             layout="vertical"
             requiredMark={false}
             autoComplete="off"
+            onFinish={handleLogin}
           >
             <Title level={2}>Login</Title>
+            {errorMessage ? (
+              <Text className="login-error" role="alert">
+                {errorMessage}
+              </Text>
+            ) : null}
 
             <Form.Item
               label="Email / Username"
-              name="identity"
+              name="email"
               rules={[
                 { required: true, message: "Email atau username wajib diisi" },
               ]}
             >
               <Input
                 prefix={<UserOutlined />}
-                placeholder="Username"
+                placeholder="Email"
                 size="large"
                 autoComplete="username"
               />
@@ -101,6 +146,7 @@ function Login() {
               htmlType="submit"
               size="large"
               icon={<LoginOutlined />}
+              loading={isSubmitting}
               block
             >
               Login
