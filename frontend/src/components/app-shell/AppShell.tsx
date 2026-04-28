@@ -1,15 +1,13 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { ReactNode, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { canAccessPath, getSidebarItemsForRole } from "@/components/sidebar/sidebar.config";
 import {
   clearStoredAuth,
-  getServerSessionSnapshot,
-  getSessionSnapshot,
-  subscribeToSession,
 } from "@/lib/session";
+import { useAuthSession } from "@/lib/use-auth-session";
 
 type AppShellProps = {
   children: ReactNode;
@@ -18,11 +16,7 @@ type AppShellProps = {
 export function AppShell({ children }: AppShellProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const auth = useSyncExternalStore(
-    subscribeToSession,
-    getSessionSnapshot,
-    getServerSessionSnapshot,
-  );
+  const auth = useAuthSession();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   useEffect(() => {
