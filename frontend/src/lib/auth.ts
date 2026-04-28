@@ -1,4 +1,6 @@
-export type AuthUser = {
+import { AuthUser, normalizeRole } from "@/types/auth";
+
+type BackendUser = {
   id: number;
   email: string;
   role: string;
@@ -6,6 +8,12 @@ export type AuthUser = {
 
 export type LoginResponse = {
   user: AuthUser;
+  token: string;
+  refreshToken: string;
+};
+
+type BackendLoginResponse = {
+  user: BackendUser;
   token: string;
   refreshToken: string;
 };
@@ -23,6 +31,16 @@ async function parseBackendError(response: Response) {
   } catch {
     return "Login failed. Please check your email and password.";
   }
+}
+
+function normalizeLoginResponse(response: BackendLoginResponse): LoginResponse {
+  return {
+    ...response,
+    user: {
+      ...response.user,
+      role: normalizeRole(response.user.role),
+    },
+  };
 }
 
 export async function login(email: string, password: string): Promise<LoginResponse> {
@@ -44,5 +62,6 @@ export async function login(email: string, password: string): Promise<LoginRespo
     throw new Error(await parseBackendError(response));
   }
 
-  return response.json() as Promise<LoginResponse>;
+  const body = (await response.json()) as BackendLoginResponse;
+  return normalizeLoginResponse(body);
 }

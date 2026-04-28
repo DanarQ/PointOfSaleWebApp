@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Point of Sale Login",
-  description: "Login page for the Point of Sale web application",
+  title: "Point of Sale",
+  description: "Role-based point of sale web application",
 };
 
 export default function RootLayout({
