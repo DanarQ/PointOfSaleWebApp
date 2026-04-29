@@ -104,7 +104,25 @@ npm start
 |---|---|---|
 | `DATABASE_URL` | Ya | `postgresql://user:pass@host:5432/dbname` |
 | `AUTH_TOKEN_SECRET` | Direkomendasikan | Secret untuk JWT. Default ke nilai hardcoded jika tidak diisi (jangan dipakai di production) |
-| `PORT` | Tidak | Default `3000` |
+| `PORT` | Tidak | Default `5000` |
+
+---
+
+## Troubleshooting
+
+### Endpoint baru atau model Prisma mengembalikan `404`
+
+Jika source code route sudah ada tetapi endpoint seperti `/transactions`, `/payments`, atau `/stock-movements` tetap mengembalikan `404`, cek apakah Prisma Client dan build output sudah mengikuti schema terbaru.
+
+Jalankan:
+
+```bash
+npm exec prisma validate -- --schema prisma/schema.prisma
+npx prisma generate
+npm run build
+```
+
+Setelah itu restart backend di `http://localhost:5000`. Route yang bergantung pada model Prisma baru tidak akan terpasang jika server masih memakai generated client atau proses lama.
 
 ---
 
@@ -221,7 +239,7 @@ User baru yang mendaftar mendapat `role: "user"`. Untuk memberi role `admin`, ub
 
 ## Endpoints
 
-Base URL: `http://localhost:3000`
+Base URL: `http://localhost:5000`
 
 ---
 

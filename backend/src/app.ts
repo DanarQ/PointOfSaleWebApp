@@ -34,6 +34,7 @@ type AppPrisma = ProductPrisma & {
 // Catch-all error handler — Express identifies error handlers by their 4-parameter signature.
 // Returns JSON instead of the default HTML error page so the API stays consistent.
 const jsonErrorHandler: ErrorRequestHandler = (_error, _req, res, _next) => {
+  console.error(_error);
   res.status(500).json({ error: "internal server error" });
 };
 
