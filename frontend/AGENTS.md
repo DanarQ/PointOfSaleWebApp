@@ -180,8 +180,6 @@ After UI, data, or runtime code changes, verify in this order:
 
 If `npm run build` fails only with Windows `spawn EPERM` after successful compile/lint, treat it as environment-specific unless proven otherwise.
 
-Do not claim UI is verified without visual inspection when UI changes were made.
-
 ---
 
 ## Expected Agent Behavior

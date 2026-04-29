@@ -58,6 +58,56 @@ export type CategoryPayload = {
   name: string;
 };
 
+export type TransactionItem = {
+  id: number;
+  transactionId: number;
+  productId: number;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  costPrice?: number | null;
+  discount: number;
+  subtotal: number;
+};
+
+export type Payment = {
+  id: number;
+  transactionId: number;
+  amount: number;
+  method: string;
+  provider?: string | null;
+  referenceNumber?: string | null;
+  status: string;
+};
+
+export type Transaction = {
+  id: number;
+  invoiceNumber: string;
+  cashierId?: number | null;
+  subtotal: number;
+  discount: number;
+  tax: number;
+  total: number;
+  paidAmount: number;
+  changeAmount: number;
+  paymentMethod: string;
+  status: string;
+  notes?: string | null;
+  items?: TransactionItem[];
+  payments?: Payment[];
+};
+
+export type TransactionPayload = {
+  cashierId?: number | null;
+  items: Array<{
+    productId: number;
+    quantity: number;
+    discount?: number;
+  }>;
+  paidAmount: number;
+  paymentMethod: "cash";
+};
+
 export class ApiError extends Error {
   status: number;
 
@@ -199,5 +249,22 @@ export function deleteCategory(id: number) {
     method: "DELETE",
   }, {
     auth: true,
+  });
+}
+
+export function createTransaction(payload: TransactionPayload) {
+  return apiRequest<Transaction>("/transactions", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }, {
+    auth: true,
+  });
+}
+
+export function listTransactions(params: { page?: number; limit?: number } = {}) {
+  return apiRequest<PaginatedResponse<Transaction>>("/transactions", {
+    method: "GET",
+  }, {
+    params,
   });
 }
