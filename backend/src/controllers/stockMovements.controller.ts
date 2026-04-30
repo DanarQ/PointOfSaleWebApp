@@ -8,6 +8,7 @@ import {
   type StockMovementPrisma,
 } from '../services/stockMovements.service.js'
 import { parsePagination } from '../utils/pagination.js'
+import { handleServiceResponse } from '../utils/serviceResponse.js'
 
 export function createStockMovementsController(prisma: StockMovementPrisma) {
   const stockMovementsService = createStockMovementsService(prisma)
@@ -29,13 +30,7 @@ export function createStockMovementsController(prisma: StockMovementPrisma) {
     // POST /stock-movements — manually record a stock-in or stock-out.
     async createStockMovement(req: Request, res: Response) {
       const result = await stockMovementsService.createStockMovement(req.body)
-
-      if (!result.ok) {
-        res.status(result.status).json({ error: result.error })
-        return
-      }
-
-      res.status(201).json(result.data)
+      handleServiceResponse(res, result, 201)
     },
 
     // GET /products/:id/stock-movements — movements for a specific product only.
@@ -48,13 +43,7 @@ export function createStockMovementsController(prisma: StockMovementPrisma) {
       }
 
       const result = await stockMovementsService.listProductStockMovements(productId)
-
-      if (!result.ok) {
-        res.status(result.status).json({ error: result.error })
-        return
-      }
-
-      res.json(result.data)
+      handleServiceResponse(res, result)
     },
   }
 }

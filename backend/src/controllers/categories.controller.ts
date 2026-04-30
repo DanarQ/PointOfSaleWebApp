@@ -6,6 +6,7 @@ import {
   type CategoryPrisma,
 } from "../services/categories.service.js";
 import { parsePagination } from "../utils/pagination.js";
+import { handleServiceResponse } from "../utils/serviceResponse.js";
 
 export function createCategoriesController(prisma: CategoryPrisma) {
   const categoriesService = createCategoriesService(prisma);
@@ -25,13 +26,7 @@ export function createCategoriesController(prisma: CategoryPrisma) {
 
     async createCategory(req: Request, res: Response) {
       const result = await categoriesService.createCategory(req.body);
-
-      if (!result.ok) {
-        res.status(result.status).json({ error: result.error });
-        return;
-      }
-
-      res.status(201).json(result.data);
+      handleServiceResponse(res, result, 201);
     },
 
     async updateCategory(req: Request, res: Response) {
@@ -46,13 +41,7 @@ export function createCategoriesController(prisma: CategoryPrisma) {
         categoryId,
         req.body,
       );
-
-      if (!result.ok) {
-        res.status(result.status).json({ error: result.error });
-        return;
-      }
-
-      res.json(result.data);
+      handleServiceResponse(res, result);
     },
 
     async deleteCategory(req: Request, res: Response) {
@@ -64,13 +53,7 @@ export function createCategoriesController(prisma: CategoryPrisma) {
       }
 
       const result = await categoriesService.deleteCategory(categoryId);
-
-      if (!result.ok) {
-        res.status(result.status).json({ error: result.error });
-        return;
-      }
-
-      res.json(result.data);
+      handleServiceResponse(res, result);
     },
   };
 }
