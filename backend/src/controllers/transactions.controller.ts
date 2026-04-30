@@ -6,6 +6,7 @@ import {
   type TransactionPrisma,
 } from '../services/transactions.service.js'
 import { parsePagination } from '../utils/pagination.js'
+import { handleServiceResponse } from '../utils/serviceResponse.js'
 
 export function createTransactionsController(prisma: TransactionPrisma) {
   const transactionsService = createTransactionsService(prisma)
@@ -33,25 +34,13 @@ export function createTransactionsController(prisma: TransactionPrisma) {
       }
 
       const result = await transactionsService.getTransaction(transactionId)
-
-      if (!result.ok) {
-        res.status(result.status).json({ error: result.error })
-        return
-      }
-
-      res.json(result.data)
+      handleServiceResponse(res, result)
     },
 
     // POST /transactions — full checkout: validates stock, records items, payment, and stock movements atomically.
     async createTransaction(req: Request, res: Response) {
       const result = await transactionsService.createTransaction(req.body)
-
-      if (!result.ok) {
-        res.status(result.status).json({ error: result.error })
-        return
-      }
-
-      res.status(201).json(result.data)
+      handleServiceResponse(res, result, 201)
     },
 
     // POST /transactions/:id/void — marks a transaction as voided and restores product stock.
@@ -65,13 +54,7 @@ export function createTransactionsController(prisma: TransactionPrisma) {
       }
 
       const result = await transactionsService.voidTransaction(transactionId, req.body)
-
-      if (!result.ok) {
-        res.status(result.status).json({ error: result.error })
-        return
-      }
-
-      res.json(result.data)
+      handleServiceResponse(res, result)
     },
   }
 }
