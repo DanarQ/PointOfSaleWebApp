@@ -83,6 +83,7 @@ type TransactionCreateData = Omit<TransactionRecord, 'id' | 'items' | 'payments'
 type TransactionPrismaClient = {
   product: {
     findUnique: (args: { where: { id: number } }) => Promise<ProductRecord | null>
+    findMany: (args: { where: { id: { in: number[] } } }) => Promise<ProductRecord[]>
     // update with increment is used by voidTransaction to restore stock for each voided item.
     update: (args: {
       where: { id: number }
@@ -401,20 +402,23 @@ export function createTransactionsService(prisma: TransactionPrisma) {
       return prisma.$transaction(async (tx) => {
         // Cache fetched products to avoid duplicate DB calls when the same product
         // appears in multiple line items.
-        const products = new Map<number, ProductRecord>()
+        const productIds = Array.from(new Set(parsedBody.data.items.map((item) => item.productId)))
+        const fetchedProducts = await tx.product.findMany({
+          where: { id: { in: productIds } },
+        })
+
+        const products = new Map<number, ProductRecord>(
+          fetchedProducts.map((p) => [p.id, p]),
+        )
         const resolvedItems: Array<ParsedTransactionItem & { product: ProductRecord; subtotal: number }> = []
 
         // Step 1: resolve each item to its product and compute item subtotals.
         for (const item of parsedBody.data.items) {
-          const product = products.get(item.productId) ?? await tx.product.findUnique({
-            where: { id: item.productId },
-          })
+          const product = products.get(item.productId)
 
           if (!product) {
             return { ok: false, status: 404, error: 'product not found' }
           }
-
-          products.set(item.productId, product)
 
           // subtotal = (unit price × qty) − item-level discount
           const subtotal = product.price * item.quantity - item.discount
