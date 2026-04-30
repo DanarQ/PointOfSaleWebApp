@@ -60,10 +60,15 @@ const passwordIterations = 120000
 const passwordKeyLength = 32
 const passwordDigest = 'sha256'
 
-// Falls back to a dev-only secret if AUTH_TOKEN_SECRET is not set.
-// Always set AUTH_TOKEN_SECRET in production.
+// Returns the secret used to sign JWTs. Throws an error if AUTH_TOKEN_SECRET is not set.
 function getTokenSecret() {
-  return process.env.AUTH_TOKEN_SECRET ?? 'point-of-sale-dev-secret'
+  const secret = process.env.AUTH_TOKEN_SECRET
+
+  if (!secret) {
+    throw new Error('AUTH_TOKEN_SECRET environment variable is required')
+  }
+
+  return secret
 }
 
 // Strips the password field before returning user data to the client.

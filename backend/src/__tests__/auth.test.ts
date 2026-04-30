@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict'
+
+// Set a dummy secret for tests before importing any code that might use it.
+process.env.AUTH_TOKEN_SECRET = 'test-secret'
+
 import type { AddressInfo } from 'node:net'
 import type { Server } from 'node:http'
 import type { Express } from 'express'
