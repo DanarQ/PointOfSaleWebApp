@@ -9,6 +9,7 @@ import {
   type ProductPrisma,
 } from '../services/products.service.js'
 import { parsePagination } from '../utils/pagination.js'
+import { handleServiceResponse } from '../utils/serviceResponse.js'
 
 export function createProductsController(prisma: ProductPrisma) {
   const productsService = createProductsService(prisma)
@@ -44,24 +45,12 @@ export function createProductsController(prisma: ProductPrisma) {
       }
 
       const result = await productsService.getProduct(productId)
-
-      if (!result.ok) {
-        res.status(result.status).json({ error: result.error })
-        return
-      }
-
-      res.json(result.data)
+      handleServiceResponse(res, result)
     },
 
     async createProduct(req: Request, res: Response) {
       const result = await productsService.createProduct(req.body)
-
-      if (!result.ok) {
-        res.status(result.status).json({ error: result.error })
-        return
-      }
-
-      res.status(201).json(result.data)
+      handleServiceResponse(res, result, 201)
     },
 
     async updateProduct(req: Request, res: Response) {
@@ -73,13 +62,7 @@ export function createProductsController(prisma: ProductPrisma) {
       }
 
       const result = await productsService.updateProduct(productId, req.body)
-
-      if (!result.ok) {
-        res.status(result.status).json({ error: result.error })
-        return
-      }
-
-      res.json(result.data)
+      handleServiceResponse(res, result)
     },
 
     async deleteProduct(req: Request, res: Response) {
@@ -91,13 +74,7 @@ export function createProductsController(prisma: ProductPrisma) {
       }
 
       const result = await productsService.deleteProduct(productId)
-
-      if (!result.ok) {
-        res.status(result.status).json({ error: result.error })
-        return
-      }
-
-      res.json(result.data)
+      handleServiceResponse(res, result)
     },
   }
 }
