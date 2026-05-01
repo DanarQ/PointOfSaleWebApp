@@ -13,6 +13,7 @@ REST API untuk aplikasi Point of Sale. Dibangun dengan **Express 5**, **Prisma 7
 - [Endpoints](#endpoints)
   - [Health](#health)
   - [Auth](#auth) — register, login, refresh, me
+  - [Users](#users)
   - [Categories](#categories)
   - [Products](#products)
   - [Stock Movements](#stock-movements)
@@ -217,6 +218,7 @@ Ketika access token sudah expired, kirim refresh token ke `POST /auth/refresh`. 
 |---|---|
 | `GET /auth/me` | semua (perlu token) |
 | `POST /auth/refresh` | semua |
+| Semua `/users` endpoint | `admin` saja |
 | `POST /products`, `PUT /products/:id` | `user`, `admin` |
 | `DELETE /products/:id` | `admin` saja |
 | `POST /categories`, `PUT /categories/:id` | `user`, `admin` |
@@ -224,7 +226,7 @@ Ketika access token sudah expired, kirim refresh token ke `POST /auth/refresh`. 
 | `POST /stock-movements` | `user`, `admin` |
 | `POST /transactions` | `user`, `admin` |
 | `POST /transactions/:id/void` | `admin` saja |
-| Semua endpoint `GET` | terbuka (tidak perlu token) |
+| Semua endpoint `GET` lain | terbuka (tidak perlu token) |
 
 **Error autentikasi:**
 - `401 { "error": "authorization token is required" }` — tidak ada token
@@ -233,7 +235,7 @@ Ketika access token sudah expired, kirim refresh token ke `POST /auth/refresh`. 
 
 ### Role default
 
-User baru yang mendaftar mendapat `role: "user"`. Untuk memberi role `admin`, ubah langsung di database atau buat endpoint admin tersendiri di sisi aplikasi.
+User baru yang mendaftar lewat `POST /auth/register` mendapat `role: "user"`. Untuk membuat atau mengubah akun admin, gunakan endpoint `/users` dengan token admin.
 
 ---
 
@@ -336,6 +338,109 @@ Authorization: Bearer <token>
 | Status | Error |
 |---|---|
 | `401` | Token tidak ada atau tidak valid |
+
+---
+
+### Users
+
+Endpoint ini dipakai halaman admin untuk mengelola akun staf. Semua endpoint `/users` memerlukan token admin.
+
+#### `GET /users`
+
+Ambil daftar user dengan pagination, search email, dan filter role.
+
+**Query Parameters** (semua opsional)
+
+| Param | Tipe | Keterangan |
+|---|---|---|
+| `page` | number | Nomor halaman |
+| `limit` | number | Jumlah item per halaman |
+| `search` | string | Cari berdasarkan email |
+| `role` | `"admin"` \| `"user"` | Filter role |
+
+**Response `200`**
+```json
+{
+  "data": [
+    { "id": 1, "email": "admin@toko.com", "role": "admin" }
+  ],
+  "pagination": {
+    "total": 1,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 1
+  }
+}
+```
+
+#### `POST /users`
+
+Buat akun staf dari halaman admin.
+
+**Request Body**
+```json
+{
+  "email": "kasir@toko.com",
+  "password": "rahasia123",
+  "role": "user"
+}
+```
+
+**Response `201`**
+```json
+{ "id": 2, "email": "kasir@toko.com", "role": "user" }
+```
+
+#### `PUT /users/:id`
+
+Update email dan role akun staf.
+
+**Request Body**
+```json
+{
+  "email": "lead@toko.com",
+  "role": "admin"
+}
+```
+
+**Response `200`**
+```json
+{ "id": 2, "email": "lead@toko.com", "role": "admin" }
+```
+
+Admin tidak bisa menurunkan role akunnya sendiri dari `admin` ke `user`.
+
+#### `PUT /users/:id/password`
+
+Reset password akun staf lain.
+
+**Request Body**
+```json
+{ "password": "passwordbaru123" }
+```
+
+**Response `200`**
+```json
+{ "message": "password updated" }
+```
+
+#### `DELETE /users/:id`
+
+Hapus akun staf. Admin tidak bisa menghapus akunnya sendiri.
+
+**Response `200`**
+```json
+{ "message": "user deleted" }
+```
+
+**Error yang mungkin**
+| Status | Error |
+|---|---|
+| `400` | `invalid user id` / input body tidak valid / self-action ditolak |
+| `401` | Token tidak ada atau tidak valid |
+| `403` | Token valid tapi bukan admin |
+| `404` | `user not found` |
+| `409` | `email already registered` |
 
 ---
 

@@ -7,6 +7,7 @@ import cors from "cors";
 import { createAuthRouter, type AuthPrisma } from "./routes/auth.js";
 import { createCategoriesRouter } from "./routes/categories.js";
 import { createProductsRouter, type ProductPrisma } from "./routes/products.js";
+import { createUsersRouter, type UserPrisma } from "./routes/users.js";
 import {
   createProductStockMovementsRouter,
   createStockMovementsRouter,
@@ -64,6 +65,10 @@ export function createApp(prisma: AppPrisma) {
 
   if (prisma.auth) {
     app.use("/auth", createAuthRouter(prisma as ProductPrisma & AuthPrisma));
+  }
+
+  if (prisma.auth && requireAuth && requireAdmin) {
+    app.use("/users", createUsersRouter(prisma as ProductPrisma & UserPrisma, requireAuth, requireAdmin));
   }
 
   if (prisma.category) {

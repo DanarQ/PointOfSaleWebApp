@@ -20,6 +20,32 @@ export type Category = {
   slug: string;
 };
 
+export type UserAccount = {
+  id: number;
+  email: string;
+  role: "admin" | "user";
+};
+
+export type UserListParams = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  role?: "admin" | "user";
+};
+
+export type UserPayload = {
+  email: string;
+  role: "admin" | "user";
+};
+
+export type CreateUserPayload = UserPayload & {
+  password: string;
+};
+
+export type ResetUserPasswordPayload = {
+  password: string;
+};
+
 export type Product = {
   id: number;
   name: string;
@@ -246,6 +272,50 @@ export function updateCategory(id: number, payload: CategoryPayload) {
 
 export function deleteCategory(id: number) {
   return apiRequest<{ message: string }>(`/categories/${id}`, {
+    method: "DELETE",
+  }, {
+    auth: true,
+  });
+}
+
+export function listUsers(params: UserListParams = {}) {
+  return apiRequest<PaginatedResponse<UserAccount>>("/users", {
+    method: "GET",
+  }, {
+    auth: true,
+    params,
+  });
+}
+
+export function createUser(payload: CreateUserPayload) {
+  return apiRequest<UserAccount>("/users", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }, {
+    auth: true,
+  });
+}
+
+export function updateUser(id: number, payload: UserPayload) {
+  return apiRequest<UserAccount>(`/users/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  }, {
+    auth: true,
+  });
+}
+
+export function resetUserPassword(id: number, payload: ResetUserPasswordPayload) {
+  return apiRequest<{ message: string }>(`/users/${id}/password`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  }, {
+    auth: true,
+  });
+}
+
+export function deleteUser(id: number) {
+  return apiRequest<{ message: string }>(`/users/${id}`, {
     method: "DELETE",
   }, {
     auth: true,
