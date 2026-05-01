@@ -42,7 +42,15 @@ const jsonErrorHandler: ErrorRequestHandler = (_error, _req, res, _next) => {
 export function createApp(prisma: AppPrisma) {
   const app = express();
 
-  app.use(cors());
+  const frontendUrls = process.env.FRONTEND_URL
+    ? process.env.FRONTEND_URL.split(",").map((url) => url.trim())
+    : ["http://localhost:3000"];
+
+  app.use(
+    cors({
+      origin: frontendUrls,
+    })
+  );
   app.use(express.json());
 
   // Simple liveness probe used by health-checks / load balancers.
