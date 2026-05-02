@@ -3,6 +3,8 @@ import type { AddressInfo } from 'node:net'
 import type { Server } from 'node:http'
 import type { Express } from 'express'
 
+process.env.AUTH_TOKEN_SECRET = 'test-secret'
+
 type AuthUser = {
   id: number
   email: string

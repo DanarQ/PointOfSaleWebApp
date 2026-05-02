@@ -14,6 +14,7 @@ REST API untuk aplikasi Point of Sale. Dibangun dengan **Express 5**, **Prisma 7
   - [Health](#health)
   - [Auth](#auth) — register, login, refresh, me
   - [Users](#users)
+  - [Settings](#settings)
   - [Categories](#categories)
   - [Products](#products)
   - [Stock Movements](#stock-movements)
@@ -219,6 +220,8 @@ Ketika access token sudah expired, kirim refresh token ke `POST /auth/refresh`. 
 | `GET /auth/me` | semua (perlu token) |
 | `POST /auth/refresh` | semua |
 | Semua `/users` endpoint | `admin` saja |
+| `GET /settings` | terbuka |
+| `PUT /settings` | `admin` saja |
 | `POST /products`, `PUT /products/:id` | `user`, `admin` |
 | `DELETE /products/:id` | `admin` saja |
 | `POST /categories`, `PUT /categories/:id` | `user`, `admin` |
@@ -441,6 +444,71 @@ Hapus akun staf. Admin tidak bisa menghapus akunnya sendiri.
 | `403` | Token valid tapi bukan admin |
 | `404` | `user not found` |
 | `409` | `email already registered` |
+
+---
+
+### Settings
+
+Endpoint ini menyimpan konfigurasi toko dan struk sebagai singleton row `id: 1`.
+`taxPercent` pada v1 hanya disimpan sebagai konfigurasi/preview dan belum mengubah kalkulasi checkout.
+
+#### `GET /settings`
+
+Ambil konfigurasi toko. Endpoint ini terbuka agar layar POS atau struk bisa membaca identitas toko.
+Jika data belum pernah disimpan, API mengembalikan default.
+
+**Response:**
+
+```json
+{
+  "id": 1,
+  "storeName": "POS Swalayan",
+  "storeAddress": null,
+  "storePhone": null,
+  "receiptFooter": "Terima kasih sudah berbelanja.",
+  "taxPercent": 0,
+  "currency": "IDR",
+  "lowStockThreshold": 5
+}
+```
+
+#### `PUT /settings`
+
+Update konfigurasi toko. Endpoint ini memerlukan token admin.
+
+**Body:**
+
+```json
+{
+  "storeName": "Toko Sumber Rejeki",
+  "storeAddress": "Jl. Pasar No. 8",
+  "storePhone": "021-555-0199",
+  "receiptFooter": "Terima kasih sudah berbelanja.",
+  "taxPercent": 11,
+  "currency": "IDR",
+  "lowStockThreshold": 12
+}
+```
+
+**Validasi:**
+
+| Field | Wajib | Aturan |
+| --- | --- | --- |
+| `storeName` | Ya | String setelah trim tidak boleh kosong |
+| `storeAddress` | Tidak | String kosong disimpan sebagai `null` |
+| `storePhone` | Tidak | String kosong disimpan sebagai `null` |
+| `receiptFooter` | Tidak | String kosong disimpan sebagai `null` |
+| `taxPercent` | Tidak | Angka `0` sampai `100`, default `0` |
+| `currency` | Tidak | Kode 3 huruf, disimpan uppercase, default `IDR` |
+| `lowStockThreshold` | Tidak | Integer `>= 0`, default `5` |
+
+**Error umum:**
+
+| Status | Keterangan |
+| --- | --- |
+| `400` | Body atau field tidak valid |
+| `401` | Token tidak ada atau tidak valid |
+| `403` | Token valid tapi bukan admin |
 
 ---
 

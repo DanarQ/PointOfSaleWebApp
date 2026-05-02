@@ -84,6 +84,27 @@ export type CategoryPayload = {
   name: string;
 };
 
+export type StoreSettings = {
+  id: number;
+  storeName: string;
+  storeAddress: string | null;
+  storePhone: string | null;
+  receiptFooter: string | null;
+  taxPercent: number;
+  currency: string;
+  lowStockThreshold: number;
+};
+
+export type StoreSettingsPayload = {
+  storeName: string;
+  storeAddress: string | null;
+  storePhone: string | null;
+  receiptFooter: string | null;
+  taxPercent: number;
+  currency: string;
+  lowStockThreshold: number;
+};
+
 export type TransactionItem = {
   id: number;
   transactionId: number;
@@ -249,6 +270,21 @@ export function listCategories(params: { page?: number; limit?: number } = {}) {
     method: "GET",
   }, {
     params,
+  });
+}
+
+export function getSettings() {
+  return apiRequest<StoreSettings>("/settings", {
+    method: "GET",
+  });
+}
+
+export function updateSettings(payload: StoreSettingsPayload) {
+  return apiRequest<StoreSettings>("/settings", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  }, {
+    auth: true,
   });
 }
 

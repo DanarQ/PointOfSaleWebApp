@@ -7,7 +7,7 @@
     "build": "tsc",
     "dev": "nodemon",
     "start": "npm run build && node dist/src/index.js",
-    "test": "npm run build && node dist/src/__tests__/products.test.js && node dist/src/__tests__/auth.test.js && node dist/src/__tests__/users.test.js && node dist/src/__tests__/categories.test.js && node dist/src/__tests__/stockMovements.test.js && node dist/src/__tests__/transactions.test.js"
+    "test": "npm run build && node dist/src/__tests__/products.test.js && node dist/src/__tests__/auth.test.js && node dist/src/__tests__/users.test.js && node dist/src/__tests__/settings.test.js && node dist/src/__tests__/categories.test.js && node dist/src/__tests__/stockMovements.test.js && node dist/src/__tests__/transactions.test.js"
   },
   "keywords": [],
   "author": "",
