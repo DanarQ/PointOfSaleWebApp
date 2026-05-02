@@ -1,7 +1,14 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { Building2, ReceiptText, RotateCcw, Save, Settings2, SlidersHorizontal } from "lucide-react";
+import {
+  Building2,
+  ReceiptText,
+  RotateCcw,
+  Save,
+  Settings2,
+  SlidersHorizontal,
+} from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app-shell/PageHeader";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -76,7 +83,8 @@ function formatPercent(value: string) {
 
 export function SettingsClient() {
   const [form, setForm] = useState<SettingsFormState>(emptyForm);
-  const [lastSavedSettings, setLastSavedSettings] = useState<StoreSettings | null>(null);
+  const [lastSavedSettings, setLastSavedSettings] =
+    useState<StoreSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
@@ -90,7 +98,10 @@ export function SettingsClient() {
       setLastSavedSettings(settings);
       setForm(settingsToForm(settings));
     } catch (loadError) {
-      const message = loadError instanceof Error ? loadError.message : "Failed to load settings.";
+      const message =
+        loadError instanceof Error
+          ? loadError.message
+          : "Failed to load settings.";
       setError(message);
       toast.error(message);
     } finally {
@@ -124,12 +135,19 @@ export function SettingsClient() {
       return;
     }
 
-    if (!Number.isFinite(Number(form.taxPercent)) || Number(form.taxPercent) < 0 || Number(form.taxPercent) > 100) {
+    if (
+      !Number.isFinite(Number(form.taxPercent)) ||
+      Number(form.taxPercent) < 0 ||
+      Number(form.taxPercent) > 100
+    ) {
       toast.error("Tax percent must be between 0 and 100.");
       return;
     }
 
-    if (!Number.isInteger(Number(form.lowStockThreshold)) || Number(form.lowStockThreshold) < 0) {
+    if (
+      !Number.isInteger(Number(form.lowStockThreshold)) ||
+      Number(form.lowStockThreshold) < 0
+    ) {
       toast.error("Low stock threshold must be a non-negative integer.");
       return;
     }
@@ -147,7 +165,11 @@ export function SettingsClient() {
       setForm(settingsToForm(settings));
       toast.success("Settings saved.");
     } catch (saveError) {
-      toast.error(saveError instanceof Error ? saveError.message : "Settings could not be saved.");
+      toast.error(
+        saveError instanceof Error
+          ? saveError.message
+          : "Settings could not be saved.",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -168,7 +190,10 @@ export function SettingsClient() {
         </Alert>
       ) : null}
 
-      <form className="mt-5 grid gap-5 xl:grid-cols-[1fr_360px]" onSubmit={handleSubmit}>
+      <form
+        className="mt-5 grid gap-5 xl:grid-cols-[1fr_360px]"
+        onSubmit={handleSubmit}
+      >
         <div className="grid gap-5">
           <Card>
             <CardHeader>
@@ -176,7 +201,9 @@ export function SettingsClient() {
                 <Building2 className="size-5 text-emerald-700" />
                 Store identity
               </CardTitle>
-              <CardDescription>Data ini dipakai untuk profil toko dan preview struk.</CardDescription>
+              <CardDescription>
+                Data ini dipakai untuk profil toko dan preview struk.
+              </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
               {isLoading ? (
@@ -190,7 +217,12 @@ export function SettingsClient() {
                     <Input
                       id="store-name"
                       value={form.storeName}
-                      onChange={(event) => setForm((current) => ({ ...current, storeName: event.target.value }))}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          storeName: event.target.value,
+                        }))
+                      }
                       placeholder="POS Swalayan"
                     />
                   </div>
@@ -199,7 +231,12 @@ export function SettingsClient() {
                     <textarea
                       id="store-address"
                       value={form.storeAddress}
-                      onChange={(event) => setForm((current) => ({ ...current, storeAddress: event.target.value }))}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          storeAddress: event.target.value,
+                        }))
+                      }
                       placeholder="Jl. Pasar No. 8"
                       className="min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm font-semibold shadow-xs outline-none transition focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                     />
@@ -209,7 +246,12 @@ export function SettingsClient() {
                     <Input
                       id="store-phone"
                       value={form.storePhone}
-                      onChange={(event) => setForm((current) => ({ ...current, storePhone: event.target.value }))}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          storePhone: event.target.value,
+                        }))
+                      }
                       placeholder="021-555-0199"
                     />
                   </div>
@@ -219,7 +261,12 @@ export function SettingsClient() {
                       id="currency"
                       value={form.currency}
                       maxLength={3}
-                      onChange={(event) => setForm((current) => ({ ...current, currency: event.target.value }))}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          currency: event.target.value,
+                        }))
+                      }
                       placeholder="IDR"
                     />
                   </div>
@@ -234,7 +281,9 @@ export function SettingsClient() {
                 <ReceiptText className="size-5 text-emerald-700" />
                 Receipt footer
               </CardTitle>
-              <CardDescription>Pesan bawah struk untuk informasi kasir dan pelanggan.</CardDescription>
+              <CardDescription>
+                Pesan bawah struk untuk informasi kasir dan pelanggan.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -245,7 +294,12 @@ export function SettingsClient() {
                   <textarea
                     id="receipt-footer"
                     value={form.receiptFooter}
-                    onChange={(event) => setForm((current) => ({ ...current, receiptFooter: event.target.value }))}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        receiptFooter: event.target.value,
+                      }))
+                    }
                     placeholder="Terima kasih sudah berbelanja."
                     className="min-h-28 rounded-md border border-input bg-background px-3 py-2 text-sm font-semibold shadow-xs outline-none transition focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                   />
@@ -260,7 +314,10 @@ export function SettingsClient() {
                 <SlidersHorizontal className="size-5 text-emerald-700" />
                 Operational defaults
               </CardTitle>
-              <CardDescription>Disimpan sebagai konfigurasi; tax belum mengubah checkout otomatis di v1.</CardDescription>
+              <CardDescription>
+                Disimpan sebagai konfigurasi; tax belum mengubah checkout
+                otomatis di v1.
+              </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-4 md:grid-cols-2">
               {isLoading ? (
@@ -279,11 +336,18 @@ export function SettingsClient() {
                       max="100"
                       step="0.01"
                       value={form.taxPercent}
-                      onChange={(event) => setForm((current) => ({ ...current, taxPercent: event.target.value }))}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          taxPercent: event.target.value,
+                        }))
+                      }
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="low-stock-threshold">Low stock threshold</Label>
+                    <Label htmlFor="low-stock-threshold">
+                      Low stock threshold
+                    </Label>
                     <Input
                       id="low-stock-threshold"
                       type="number"
@@ -291,7 +355,10 @@ export function SettingsClient() {
                       step="1"
                       value={form.lowStockThreshold}
                       onChange={(event) =>
-                        setForm((current) => ({ ...current, lowStockThreshold: event.target.value }))
+                        setForm((current) => ({
+                          ...current,
+                          lowStockThreshold: event.target.value,
+                        }))
                       }
                     />
                   </div>
@@ -308,14 +375,22 @@ export function SettingsClient() {
                 <Settings2 className="size-5 text-emerald-700" />
                 Receipt preview
               </CardTitle>
-              <CardDescription>Preview tampilan data toko untuk struk kasir.</CardDescription>
+              <CardDescription>
+                Preview tampilan data toko untuk struk kasir.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="rounded-lg border border-dashed border-emerald-900/25 bg-stone-50 p-4 font-mono text-xs text-stone-700">
                 <div className="text-center">
-                  <p className="text-sm font-black text-emerald-950">{form.storeName || "POS Swalayan"}</p>
-                  <p className="mt-1 whitespace-pre-line">{form.storeAddress || "Alamat toko belum diisi"}</p>
-                  <p className="mt-1">{form.storePhone || "Telepon belum diisi"}</p>
+                  <p className="text-sm font-black text-emerald-950">
+                    {form.storeName || "POS Swalayan"}
+                  </p>
+                  <p className="mt-1 whitespace-pre-line">
+                    {form.storeAddress || "Alamat toko belum diisi"}
+                  </p>
+                  <p className="mt-1">
+                    {form.storePhone || "Telepon belum diisi"}
+                  </p>
                 </div>
                 <Separator className="my-4" />
                 <div className="space-y-2">
@@ -333,7 +408,9 @@ export function SettingsClient() {
                   </div>
                 </div>
                 <Separator className="my-4" />
-                <p className="text-center font-bold">{form.receiptFooter || "Terima kasih sudah berbelanja."}</p>
+                <p className="text-center font-bold">
+                  {form.receiptFooter || "Terima kasih sudah berbelanja."}
+                </p>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
                 <Badge variant="secondary">Read public</Badge>
@@ -345,14 +422,21 @@ export function SettingsClient() {
           <Card>
             <CardHeader>
               <CardTitle>Save control</CardTitle>
-              <CardDescription>Perubahan tersimpan ke backend settings singleton.</CardDescription>
+              <CardDescription>
+                Perubahan tersimpan ke backend settings singleton.
+              </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
               <Button type="submit" disabled={isLoading || isSaving}>
                 <Save />
                 {isSaving ? "Saving..." : "Save Settings"}
               </Button>
-              <Button type="button" variant="outline" disabled={isLoading || isSaving} onClick={resetForm}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isLoading || isSaving}
+                onClick={resetForm}
+              >
                 <RotateCcw />
                 Reset Form
               </Button>
