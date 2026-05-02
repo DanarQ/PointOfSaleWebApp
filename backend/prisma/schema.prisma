@@ -132,3 +132,18 @@ model StockMovement {
   @@index([createdAt])
   @@map("stock_movements")
 }
+
+model StoreSetting {
+  id                Int      @id
+  storeName         String   @default("POS Swalayan")
+  storeAddress      String?
+  storePhone        String?
+  receiptFooter     String?  @default("Terima kasih sudah berbelanja.")
+  taxPercent        Float    @default(0)
+  currency          String   @default("IDR")
+  lowStockThreshold Int      @default(5)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @default(now()) @updatedAt
+
+  @@map("store_settings")
+}

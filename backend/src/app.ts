@@ -14,11 +14,13 @@ import {
 } from "./routes/stockMovements.js";
 import { createTransactionsRouter } from "./routes/transactions.js";
 import { createPaymentsRouter } from "./routes/payments.js";
+import { createSettingsRouter } from "./routes/settings.js";
 import { createAuthMiddleware, requireRole } from "./middleware/auth.js";
 import type { CategoryPrisma } from "./services/categories.service.js";
 import type { StockMovementPrisma } from "./services/stockMovements.service.js";
 import type { TransactionPrisma } from "./services/transactions.service.js";
 import type { PaymentPrisma } from "./services/payments.service.js";
+import type { SettingsPrisma } from "./services/settings.service.js";
 
 // Union of all prisma model requirements across every router.
 // Using unknown for optional models because the real prisma client satisfies all of them.
@@ -29,6 +31,7 @@ type AppPrisma = ProductPrisma & {
   transaction?: unknown;
   transactionItem?: unknown;
   payment?: unknown;
+  storeSetting?: unknown;
   $transaction?: unknown;
 };
 
@@ -110,6 +113,10 @@ export function createApp(prisma: AppPrisma) {
 
   if (prisma.payment) {
     app.use("/payments", createPaymentsRouter(prisma as ProductPrisma & PaymentPrisma));
+  }
+
+  if (prisma.storeSetting) {
+    app.use("/settings", createSettingsRouter(prisma as ProductPrisma & SettingsPrisma, requireAuth, requireAdmin));
   }
 
   // Products router is always present — other routers depend on the product model.
