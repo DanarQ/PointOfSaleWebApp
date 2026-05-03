@@ -97,7 +97,7 @@ export function createApp(prisma: AppPrisma) {
     );
     app.use(
       "/stock-movements",
-      createStockMovementsRouter(prisma as ProductPrisma & StockMovementPrisma, requireAuth),
+      createStockMovementsRouter(prisma as ProductPrisma & StockMovementPrisma, requireAuth, requireAdmin),
     );
   }
 

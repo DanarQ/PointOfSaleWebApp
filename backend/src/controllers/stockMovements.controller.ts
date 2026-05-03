@@ -5,6 +5,7 @@ import type { Request, Response } from 'express'
 import {
   createStockMovementsService,
   parseProductId,
+  parseStockMovementListFilters,
   type StockMovementPrisma,
 } from '../services/stockMovements.service.js'
 import { parsePagination } from '../utils/pagination.js'
@@ -23,13 +24,20 @@ export function createStockMovementsController(prisma: StockMovementPrisma) {
         return
       }
 
-      const result = await stockMovementsService.listStockMovements(pagination.value)
+      const filters = parseStockMovementListFilters(req.query as Record<string, unknown>)
+
+      if ('error' in filters) {
+        res.status(400).json({ error: filters.error })
+        return
+      }
+
+      const result = await stockMovementsService.listStockMovements(filters.value, pagination.value)
       res.json(result)
     },
 
     // POST /stock-movements — manually record a stock-in or stock-out.
     async createStockMovement(req: Request, res: Response) {
-      const result = await stockMovementsService.createStockMovement(req.body)
+      const result = await stockMovementsService.createStockMovement(req.body, req.user?.id ?? null)
       handleServiceResponse(res, result, 201)
     },
 

@@ -3,9 +3,10 @@ type PageHeaderProps = {
   title: string;
   description: string;
   action?: string;
+  onAction?: () => void;
 };
 
-export function PageHeader({ eyebrow, title, description, action }: PageHeaderProps) {
+export function PageHeader({ eyebrow, title, description, action, onAction }: PageHeaderProps) {
   return (
     <section className="overflow-hidden rounded-lg border border-emerald-950/10 bg-white shadow-sm shadow-emerald-950/5">
       <div className="h-1.5 bg-gradient-to-r from-emerald-600 via-emerald-500 to-amber-400" />
@@ -19,6 +20,7 @@ export function PageHeader({ eyebrow, title, description, action }: PageHeaderPr
         {action ? (
           <button
             type="button"
+            onClick={onAction}
             className="h-11 rounded-md border border-emerald-700 bg-emerald-700 px-4 text-sm font-black text-white shadow-sm shadow-emerald-900/10 transition hover:bg-emerald-800"
           >
             {action}

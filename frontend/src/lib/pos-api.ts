@@ -61,6 +61,24 @@ export type Product = {
   isActive?: boolean;
 };
 
+export type StockMovementType = "in" | "out" | "sale" | "void" | string;
+
+export type StockMovement = {
+  id: number;
+  productId: number;
+  userId?: number | null;
+  type: StockMovementType;
+  quantity: number;
+  stockBefore: number;
+  stockAfter: number;
+  referenceType?: string | null;
+  referenceId?: number | null;
+  notes?: string | null;
+  createdAt?: string;
+  product?: Pick<Product, "id" | "name" | "sku" | "barcode" | "unit"> | null;
+  user?: UserAccount | null;
+};
+
 export type ProductListParams = {
   page?: number;
   limit?: number;
@@ -78,6 +96,22 @@ export type ProductPayload = {
   stock?: number;
   unit?: string;
   isActive?: boolean;
+};
+
+export type StockMovementListParams = {
+  page?: number;
+  limit?: number;
+  productId?: number;
+  type?: string;
+};
+
+export type StockMovementPayload = {
+  productId: number;
+  type: "in" | "out";
+  quantity: number;
+  referenceType?: string | null;
+  referenceId?: number | null;
+  notes?: string | null;
 };
 
 export type CategoryPayload = {
@@ -260,6 +294,29 @@ export function updateProduct(id: number, payload: ProductPayload) {
 export function deleteProduct(id: number) {
   return apiRequest<{ message: string }>(`/products/${id}`, {
     method: "DELETE",
+  }, {
+    auth: true,
+  });
+}
+
+export function listStockMovements(params: StockMovementListParams = {}) {
+  return apiRequest<PaginatedResponse<StockMovement>>("/stock-movements", {
+    method: "GET",
+  }, {
+    params,
+  });
+}
+
+export function listProductStockMovements(productId: number) {
+  return apiRequest<StockMovement[]>(`/products/${productId}/stock-movements`, {
+    method: "GET",
+  });
+}
+
+export function createStockMovement(payload: StockMovementPayload) {
+  return apiRequest<StockMovement>("/stock-movements", {
+    method: "POST",
+    body: JSON.stringify(payload),
   }, {
     auth: true,
   });

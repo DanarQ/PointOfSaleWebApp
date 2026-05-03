@@ -3,6 +3,15 @@ import type { AddressInfo } from 'node:net'
 import type { Server } from 'node:http'
 import type { Express } from 'express'
 
+process.env.AUTH_TOKEN_SECRET = 'test-secret'
+
+type AuthUser = {
+  id: number
+  email: string
+  password: string
+  role: string
+}
+
 type Product = {
   id: number
   name: string
@@ -45,9 +54,13 @@ type StockPrismaStub = {
     delete: () => Promise<never>
   }
   stockMovement: {
-    findMany: (args?: { where?: { productId?: number }; orderBy?: { id: 'desc' }; skip?: number; take?: number }) => Promise<StockMovement[]>
-    count: (args?: { where?: { productId?: number } }) => Promise<number>
+    findMany: (args?: { where?: { productId?: number; type?: string }; orderBy?: { id: 'desc' }; skip?: number; take?: number }) => Promise<StockMovement[]>
+    count: (args?: { where?: { productId?: number; type?: string } }) => Promise<number>
     create: (args: { data: Omit<StockMovement, 'id'> }) => Promise<StockMovement>
+  }
+  auth?: {
+    findUnique: (args: { where: { email?: string; id?: number } }) => Promise<AuthUser | null>
+    create: () => Promise<never>
   }
   $transaction: <T>(run: (tx: StockPrismaStub) => Promise<T>) => Promise<T>
   testControls: {
@@ -55,9 +68,10 @@ type StockPrismaStub = {
   }
 }
 
-function createPrismaStub(seed: { products?: Product[]; stockMovements?: StockMovement[] } = {}) {
+function createPrismaStub(seed: { products?: Product[]; stockMovements?: StockMovement[]; users?: AuthUser[] } = {}) {
   let products = [...(seed.products ?? [])]
   let stockMovements = [...(seed.stockMovements ?? [])]
+  const users = [...(seed.users ?? [])]
   let nextStockMovementId =
     stockMovements.reduce((maxId, movement) => Math.max(maxId, movement.id), 0) + 1
   let directStockNumberUpdates = 0
@@ -136,19 +150,35 @@ function createPrismaStub(seed: { products?: Product[]; stockMovements?: StockMo
       },
     },
     stockMovement: {
-      async findMany(args?: { where?: { productId?: number }; orderBy?: { id: 'desc' }; skip?: number; take?: number }) {
-        const filtered =
-          args?.where?.productId === undefined
-            ? stockMovements
-            : stockMovements.filter((movement) => movement.productId === args.where?.productId)
+      async findMany(args?: { where?: { productId?: number; type?: string }; orderBy?: { id: 'desc' }; skip?: number; take?: number }) {
+        const filtered = stockMovements.filter((movement) => {
+          if (args?.where?.productId !== undefined && movement.productId !== args.where.productId) {
+            return false
+          }
+
+          if (args?.where?.type !== undefined && movement.type !== args.where.type) {
+            return false
+          }
+
+          return true
+        })
 
         const sorted = [...filtered].sort((left, right) => right.id - left.id)
         const start = args?.skip ?? 0
         return args?.take !== undefined ? sorted.slice(start, start + args.take) : sorted.slice(start)
       },
-      async count(args?: { where?: { productId?: number } }) {
-        if (args?.where?.productId === undefined) return stockMovements.length
-        return stockMovements.filter((m) => m.productId === args.where?.productId).length
+      async count(args?: { where?: { productId?: number; type?: string } }) {
+        return stockMovements.filter((movement) => {
+          if (args?.where?.productId !== undefined && movement.productId !== args.where.productId) {
+            return false
+          }
+
+          if (args?.where?.type !== undefined && movement.type !== args.where.type) {
+            return false
+          }
+
+          return true
+        }).length
       },
       async create({ data }: { data: Omit<StockMovement, 'id'> }) {
         const movement = { id: nextStockMovementId++, ...data }
@@ -156,6 +186,24 @@ function createPrismaStub(seed: { products?: Product[]; stockMovements?: StockMo
         return movement
       },
     },
+    auth: seed.users
+      ? {
+          async findUnique({ where }: { where: { email?: string; id?: number } }) {
+            if (where.email !== undefined) {
+              return users.find((user) => user.email === where.email) ?? null
+            }
+
+            if (where.id !== undefined) {
+              return users.find((user) => user.id === where.id) ?? null
+            }
+
+            return null
+          },
+          async create() {
+            throw new Error('not implemented')
+          },
+        }
+      : undefined,
     async $transaction<T>(run: (tx: typeof prisma) => Promise<T>) {
       return run(prisma)
     },
@@ -168,6 +216,21 @@ function createPrismaStub(seed: { products?: Product[]; stockMovements?: StockMo
 
   return prisma
 }
+
+async function getAdminToken() {
+  const { createAuthToken } = await import('../routes/auth.js')
+  return createAuthToken({ id: 1, email: 'admin@example.com', role: 'admin' })
+}
+
+async function getUserToken() {
+  const { createAuthToken } = await import('../routes/auth.js')
+  return createAuthToken({ id: 2, email: 'cashier@example.com', role: 'user' })
+}
+
+const authUsers: AuthUser[] = [
+  { id: 1, email: 'admin@example.com', password: 'hash', role: 'admin' },
+  { id: 2, email: 'cashier@example.com', password: 'hash', role: 'user' },
+]
 
 async function runTest(name: string, run: () => Promise<void>) {
   try {
@@ -234,6 +297,45 @@ const tests: TestCase[] = [
     },
   },
   {
+    name: 'GET /stock-movements filters by product and movement type',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp(
+        createPrismaStub({
+          stockMovements: [
+            { id: 1, productId: 1, type: 'in', quantity: 5, stockBefore: 0, stockAfter: 5 },
+            { id: 2, productId: 1, type: 'out', quantity: 2, stockBefore: 5, stockAfter: 3 },
+            { id: 3, productId: 2, type: 'in', quantity: 7, stockBefore: 0, stockAfter: 7 },
+          ],
+        }),
+      )
+
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/stock-movements?productId=1&type=in`)
+
+        assert.equal(response.status, 200)
+        assert.deepEqual(await response.json(), {
+          data: [{ id: 1, productId: 1, type: 'in', quantity: 5, stockBefore: 0, stockAfter: 5 }],
+          pagination: { total: 1, page: 1, limit: 20, totalPages: 1 },
+        })
+      })
+    },
+  },
+  {
+    name: 'GET /stock-movements rejects invalid filters',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp(createPrismaStub())
+
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/stock-movements?productId=abc`)
+
+        assert.equal(response.status, 400)
+        assert.deepEqual(await response.json(), { error: 'productId must be a positive integer' })
+      })
+    },
+  },
+  {
     name: 'POST /stock-movements increases product stock and records movement',
     async run() {
       const { createApp } = await import('../app.js')
@@ -290,6 +392,69 @@ const tests: TestCase[] = [
           referenceId: null,
           notes: null,
         })
+      })
+    },
+  },
+  {
+    name: 'POST /stock-movements uses authenticated admin id for stock audit',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp(
+        createPrismaStub({
+          users: authUsers,
+          products: [{ id: 1, name: 'Coffee', price: 15000, stock: 3 }],
+        }),
+      )
+
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/stock-movements`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${await getAdminToken()}`,
+          },
+          body: JSON.stringify({ productId: 1, userId: 2, type: 'in', quantity: 4, notes: 'Restock' }),
+        })
+
+        assert.equal(response.status, 201)
+        assert.deepEqual(await response.json(), {
+          id: 1,
+          productId: 1,
+          userId: 1,
+          type: 'in',
+          quantity: 4,
+          stockBefore: 3,
+          stockAfter: 7,
+          referenceType: null,
+          referenceId: null,
+          notes: 'Restock',
+        })
+      })
+    },
+  },
+  {
+    name: 'POST /stock-movements rejects non-admin users',
+    async run() {
+      const { createApp } = await import('../app.js')
+      const app = createApp(
+        createPrismaStub({
+          users: authUsers,
+          products: [{ id: 1, name: 'Coffee', price: 15000, stock: 3 }],
+        }),
+      )
+
+      await withServer(app, async (baseUrl) => {
+        const response = await fetch(`${baseUrl}/stock-movements`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${await getUserToken()}`,
+          },
+          body: JSON.stringify({ productId: 1, type: 'in', quantity: 4 }),
+        })
+
+        assert.equal(response.status, 403)
+        assert.deepEqual(await response.json(), { error: 'insufficient permissions' })
       })
     },
   },

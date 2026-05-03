@@ -226,7 +226,7 @@ Ketika access token sudah expired, kirim refresh token ke `POST /auth/refresh`. 
 | `DELETE /products/:id` | `admin` saja |
 | `POST /categories`, `PUT /categories/:id` | `user`, `admin` |
 | `DELETE /categories/:id` | `admin` saja |
-| `POST /stock-movements` | `user`, `admin` |
+| `POST /stock-movements` | `admin` saja |
 | `POST /transactions` | `user`, `admin` |
 | `POST /transactions/:id/void` | `admin` saja |
 | Semua endpoint `GET` lain | terbuka (tidak perlu token) |
@@ -708,22 +708,51 @@ Mencatat setiap perubahan stok. Membuat movement juga mengupdate `product.stock`
 
 Ambil semua riwayat pergerakan stok, terbaru duluan.
 
+**Query params**
+
+| Param | Tipe | Keterangan |
+|---|---|---|
+| `page` | number | Halaman, default `1` |
+| `limit` | number | Jumlah data per halaman, default `20`, maksimum `100` |
+| `productId` | number | Filter movement untuk produk tertentu |
+| `type` | string | Filter tipe movement, contoh `in`, `out`, `sale`, `void` |
+
 **Response `200`**
 ```json
-[
-  {
-    "id": 5,
-    "productId": 1,
-    "userId": 2,
-    "type": "in",
-    "quantity": 50,
-    "stockBefore": 10,
-    "stockAfter": 60,
-    "referenceType": null,
-    "referenceId": null,
-    "notes": "Restock dari supplier"
+{
+  "data": [
+    {
+      "id": 5,
+      "productId": 1,
+      "userId": 2,
+      "type": "in",
+      "quantity": 50,
+      "stockBefore": 10,
+      "stockAfter": 60,
+      "referenceType": null,
+      "referenceId": null,
+      "notes": "Restock dari supplier",
+      "product": {
+        "id": 1,
+        "name": "Kopi sachet",
+        "sku": "KOPI-001",
+        "barcode": null,
+        "unit": "pcs"
+      },
+      "user": {
+        "id": 2,
+        "email": "admin@example.com",
+        "role": "admin"
+      }
+    }
+  ],
+  "pagination": {
+    "total": 1,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 1
   }
-]
+}
 ```
 
 ---
@@ -732,7 +761,7 @@ Ambil semua riwayat pergerakan stok, terbaru duluan.
 
 Ambil riwayat stok untuk satu produk saja, terbaru duluan.
 
-**Response `200`** — array StockMovement (sama dengan format di atas)
+**Response `200`** — array StockMovement (item sama dengan format `data[]` di atas)
 
 **Error**
 | Status | Error |
@@ -744,7 +773,7 @@ Ambil riwayat stok untuk satu produk saja, terbaru duluan.
 
 #### `POST /stock-movements`
 
-Buat pergerakan stok secara manual (restock atau koreksi).
+Buat pergerakan stok secara manual (restock atau koreksi). Endpoint ini admin-only; `userId` audit diambil dari token admin, bukan dari request body.
 
 **Request Body**
 
@@ -753,7 +782,6 @@ Buat pergerakan stok secara manual (restock atau koreksi).
 | `productId` | number | Ya | ID produk |
 | `type` | `"in"` \| `"out"` | Ya | `in` = tambah stok, `out` = kurangi stok |
 | `quantity` | number | Ya | Jumlah (bilangan bulat positif) |
-| `userId` | number \| null | Tidak | ID user yang melakukan perubahan |
 | `referenceType` | string \| null | Tidak | Tipe referensi, contoh: `"adjustment"` |
 | `referenceId` | number \| null | Tidak | ID referensi |
 | `notes` | string \| null | Tidak | Catatan |
@@ -773,6 +801,8 @@ Buat pergerakan stok secara manual (restock atau koreksi).
 | Status | Error |
 |---|---|
 | `400` | Field tidak valid atau `stock cannot be negative` (untuk type `out`) |
+| `401` | Token tidak ada atau tidak valid |
+| `403` | Role bukan admin |
 | `404` | `product not found` |
 
 ---

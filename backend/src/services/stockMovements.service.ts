@@ -8,6 +8,16 @@ type ProductStockRecord = {
   stock?: number | null
 }
 
+type StockMovementWhereInput = {
+  productId?: number
+  type?: string
+}
+
+type StockMovementIncludeInput = {
+  product?: { select: { id: boolean; name: boolean; sku: boolean; barcode: boolean; unit: boolean } }
+  user?: { select: { id: boolean; email: boolean; role: boolean } }
+}
+
 // Full stock movement record as stored in the DB.
 type StockMovementRecord = {
   id: number
@@ -48,12 +58,13 @@ type StockMovementTransactionPrisma = {
 export type StockMovementPrisma = StockMovementTransactionPrisma & {
   stockMovement: StockMovementTransactionPrisma['stockMovement'] & {
     findMany: (args: {
-      where?: { productId: number }
+      where?: StockMovementWhereInput
+      include?: StockMovementIncludeInput
       orderBy: { id: 'desc' }
       skip?: number
       take?: number
     }) => Promise<StockMovementRecord[]>
-    count: (args?: { where?: { productId: number } }) => Promise<number>
+    count: (args?: { where?: StockMovementWhereInput }) => Promise<number>
   }
   $transaction: <T>(run: (tx: StockMovementTransactionPrisma) => Promise<T>) => Promise<T>
 }
@@ -61,7 +72,6 @@ export type StockMovementPrisma = StockMovementTransactionPrisma & {
 // Validated input from the request body before it hits the DB.
 type StockMovementBodyData = {
   productId: number
-  userId: number | null
   type: 'in' | 'out'
   quantity: number
   referenceType: string | null
@@ -73,6 +83,11 @@ type StockMovementBodyData = {
 export type StockMovementServiceResult<T> =
   | { ok: true; data: T }
   | { ok: false; status: 400 | 404; error: string }
+
+export type StockMovementListFilters = {
+  productId?: number
+  type?: string
+}
 
 // Parses and validates a product ID from a URL param string.
 export function parseProductId(rawId: unknown) {
@@ -89,7 +104,41 @@ export function parseProductId(rawId: unknown) {
   return id
 }
 
-// Validates that a value is a positive integer (used for productId, quantity, userId, referenceId).
+export function parseStockMovementListFilters(
+  query: Record<string, unknown>,
+): { value: StockMovementListFilters } | { error: string } {
+  const filters: StockMovementListFilters = {}
+
+  if (query.productId !== undefined) {
+    if (typeof query.productId !== 'string') {
+      return { error: 'productId must be a positive integer' }
+    }
+
+    const productId = Number(query.productId)
+
+    if (!Number.isInteger(productId) || productId <= 0) {
+      return { error: 'productId must be a positive integer' }
+    }
+
+    filters.productId = productId
+  }
+
+  if (query.type !== undefined) {
+    if (typeof query.type !== 'string') {
+      return { error: 'type must be a string' }
+    }
+
+    const type = query.type.trim()
+
+    if (type) {
+      filters.type = type
+    }
+  }
+
+  return { value: filters }
+}
+
+// Validates that a value is a positive integer (used for productId, quantity, referenceId).
 function parsePositiveInteger(value: unknown, fieldName: string): { value: number } | { error: string } {
   if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
     return { error: `${fieldName} must be a positive integer` }
@@ -101,7 +150,7 @@ function parsePositiveInteger(value: unknown, fieldName: string): { value: numbe
 // Same as above but treats undefined/null as "not provided" (returns null, not an error).
 function parseOptionalPositiveInteger(
   body: Record<string, unknown>,
-  fieldName: 'userId' | 'referenceId',
+  fieldName: 'referenceId',
 ): { value: number | null } | { error: string } {
   const value = body[fieldName]
 
@@ -132,7 +181,7 @@ function parseOptionalString(
 
 // Full request body validation for creating a stock movement.
 // Required: productId, quantity, type ('in' | 'out').
-// Optional: userId, referenceType, referenceId, notes.
+// Optional: referenceType, referenceId, notes.
 function parseStockMovementBody(body: unknown): StockMovementServiceResult<StockMovementBodyData> {
   if (!body || typeof body !== 'object') {
     return { ok: false, status: 400, error: 'invalid request body' }
@@ -153,12 +202,6 @@ function parseStockMovementBody(body: unknown): StockMovementServiceResult<Stock
 
   if (stockBody.type !== 'in' && stockBody.type !== 'out') {
     return { ok: false, status: 400, error: 'type must be in or out' }
-  }
-
-  const userId = parseOptionalPositiveInteger(stockBody, 'userId')
-
-  if ('error' in userId) {
-    return { ok: false, status: 400, error: userId.error }
   }
 
   const referenceId = parseOptionalPositiveInteger(stockBody, 'referenceId')
@@ -183,7 +226,6 @@ function parseStockMovementBody(body: unknown): StockMovementServiceResult<Stock
     ok: true,
     data: {
       productId: productId.value,
-      userId: userId.value,
       type: stockBody.type,
       quantity: quantity.value,
       referenceType: referenceType.value,
@@ -196,12 +238,25 @@ function parseStockMovementBody(body: unknown): StockMovementServiceResult<Stock
 export function createStockMovementsService(prisma: StockMovementPrisma) {
   return {
     // GET /stock-movements — paginated, newest first.
-    async listStockMovements(pagination: PaginationParams = { page: 1, limit: 20 }) {
+    async listStockMovements(
+      filters: StockMovementListFilters = {},
+      pagination: PaginationParams = { page: 1, limit: 20 },
+    ) {
+      const where = Object.keys(filters).length === 0 ? undefined : filters
       const { skip, take } = getPaginationArgs(pagination.page, pagination.limit)
 
       const [data, total] = await Promise.all([
-        prisma.stockMovement.findMany({ orderBy: { id: 'desc' }, skip, take }),
-        prisma.stockMovement.count(),
+        prisma.stockMovement.findMany({
+          where,
+          include: {
+            product: { select: { id: true, name: true, sku: true, barcode: true, unit: true } },
+            user: { select: { id: true, email: true, role: true } },
+          },
+          orderBy: { id: 'desc' },
+          skip,
+          take,
+        }),
+        prisma.stockMovement.count({ where }),
       ])
 
       return buildPaginatedResponse(data, total, pagination.page, pagination.limit)
@@ -217,6 +272,10 @@ export function createStockMovementsService(prisma: StockMovementPrisma) {
 
       const movements = await prisma.stockMovement.findMany({
         where: { productId },
+        include: {
+          product: { select: { id: true, name: true, sku: true, barcode: true, unit: true } },
+          user: { select: { id: true, email: true, role: true } },
+        },
         orderBy: { id: 'desc' },
       })
 
@@ -224,7 +283,10 @@ export function createStockMovementsService(prisma: StockMovementPrisma) {
     },
 
     // POST /stock-movements — records a movement and updates product.stock in one DB transaction.
-    async createStockMovement(body: unknown): Promise<StockMovementServiceResult<StockMovementRecord>> {
+    async createStockMovement(
+      body: unknown,
+      currentUserId: number | null,
+    ): Promise<StockMovementServiceResult<StockMovementRecord>> {
       const parsedBody = parseStockMovementBody(body)
 
       if (!parsedBody.ok) {
@@ -293,7 +355,7 @@ export function createStockMovementsService(prisma: StockMovementPrisma) {
         const movement = await tx.stockMovement.create({
           data: {
             productId: parsedBody.data.productId,
-            userId: parsedBody.data.userId,
+            userId: currentUserId,
             type: parsedBody.data.type,
             quantity: parsedBody.data.quantity,
             stockBefore,
