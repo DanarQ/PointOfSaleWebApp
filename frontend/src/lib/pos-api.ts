@@ -174,6 +174,8 @@ export type Transaction = {
   paymentMethod: string;
   status: string;
   notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
   items?: TransactionItem[];
   payments?: Payment[];
 };
